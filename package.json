@@ -1,0 +1,66 @@
+{
+	"name": "tokenbbq",
+	"type": "module",
+	"version": "0.1.0",
+	"description": "Visualize token usage and costs across all major AI coding tools — Claude Code, Codex, OpenCode, Amp, Pi",
+	"author": "offbyone1",
+	"license": "MIT",
+	"homepage": "https://github.com/offbyone1/tokenbbq#readme",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/offbyone1/tokenbbq.git"
+	},
+	"bugs": {
+		"url": "https://github.com/offbyone1/tokenbbq/issues"
+	},
+	"keywords": [
+		"token",
+		"usage",
+		"cost",
+		"claude",
+		"codex",
+		"opencode",
+		"amp",
+		"llm",
+		"ai",
+		"dashboard",
+		"visualization"
+	],
+	"main": "./dist/index.mjs",
+	"bin": {
+		"tokenbbq": "./dist/index.mjs"
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"dev": "node --import tsx src/index.ts",
+		"start": "node dist/index.js",
+		"lint": "tsc --noEmit",
+		"test": "node --test",
+		"prepublishOnly": "npm run build"
+	},
+	"dependencies": {
+		"@hono/node-server": "^1.13.0",
+		"cli-table3": "^0.6.5",
+		"hono": "^4.6.0",
+		"open": "^10.1.0",
+		"picocolors": "^1.1.1",
+		"tinyglobby": "^0.2.14"
+	},
+	"devDependencies": {
+		"tsdown": "^0.16.0",
+		"tsx": "^4.19.0",
+		"typescript": "^5.7.0",
+		"@types/node": "^22.0.0"
+	}
+}

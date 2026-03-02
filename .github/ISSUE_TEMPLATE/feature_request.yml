@@ -1,0 +1,23 @@
+name: Feature Request
+description: Suggest a new feature for TokenBBQ
+labels: [enhancement]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description
+      description: What would you like TokenBBQ to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: usecase
+    attributes:
+      label: Use Case
+      description: Why do you need this? What problem does it solve?
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you tried any workarounds?

@@ -1,0 +1,47 @@
+name: Bug Report
+description: Report a bug in TokenBBQ
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: What happened? What did you expect?
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      placeholder: "e.g., macOS 15, Windows 11, Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node.js Version
+      placeholder: "e.g., 22.0.0"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: tools
+    attributes:
+      label: Installed AI Tools
+      options:
+        - label: Claude Code
+        - label: Codex
+        - label: OpenCode
+        - label: Amp
+        - label: Pi-Agent
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Run `npx tokenbbq`
+        2. ...
