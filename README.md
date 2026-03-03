@@ -70,6 +70,12 @@ TokenBBQ builds on the data-loading patterns from [ccusage](https://github.com/r
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and how to add support for new tools.
 
+## Support
+
+If TokenBBQ saves you from bill shock, consider buying me a coffee:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/M4M11VBHXH)
+
 ## License
 
 [MIT](LICENSE) © [offbyone1](https://github.com/offbyone1)
