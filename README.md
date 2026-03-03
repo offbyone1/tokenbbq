@@ -3,6 +3,8 @@
 [![npm version](https://img.shields.io/npm/v/tokenbbq.svg)](https://www.npmjs.com/package/tokenbbq)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+🌐 **[offbyone.cloud](https://offbyone.cloud)** — Homepage
+
 **See what your AI coding tools actually cost you.** TokenBBQ reads local usage data from Claude Code, Codex, Gemini, OpenCode, Amp, and Pi-Agent and shows it all in one dashboard.
 
 ## Quick Start
