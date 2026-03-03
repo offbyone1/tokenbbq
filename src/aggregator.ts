@@ -1,14 +1,21 @@
 import type {
 	UnifiedTokenEvent,
 	DailyAggregation,
+	DailySourceAggregation,
+	DailyModelAggregation,
+	DailySourceModelAggregation,
 	MonthlyAggregation,
 	SourceAggregation,
 	ModelAggregation,
+	SourceModelAggregation,
+	ProjectAggregation,
 	HeatmapCell,
 	DashboardData,
 	Source,
 } from './types.js';
 import { emptyTokens, addTokens, totalTokenCount } from './types.js';
+
+const SOURCE_ORDER: Source[] = ['claude-code', 'codex', 'opencode', 'amp', 'pi'];
 
 function dateKey(timestamp: string): string {
 	return new Date(timestamp).toISOString().slice(0, 10);
@@ -20,6 +27,22 @@ function monthKey(timestamp: string): string {
 
 function unique<T>(arr: T[]): T[] {
 	return [...new Set(arr)];
+}
+
+function sourceRank(source: Source): number {
+	const index = SOURCE_ORDER.indexOf(source);
+	return index === -1 ? SOURCE_ORDER.length : index;
+}
+
+function sortSources(sources: Source[]): Source[] {
+	return [...sources].sort((a, b) => sourceRank(a) - sourceRank(b) || a.localeCompare(b));
+}
+
+function normalizedProjectName(project?: string): string | null {
+	if (typeof project !== 'string') return null;
+	const trimmed = project.trim();
+	if (!trimmed || trimmed.toLowerCase() === 'unknown') return null;
+	return trimmed;
 }
 
 export function aggregateDaily(events: UnifiedTokenEvent[]): DailyAggregation[] {
@@ -48,10 +71,102 @@ export function aggregateDaily(events: UnifiedTokenEvent[]): DailyAggregation[] 
 
 	for (const agg of map.values()) {
 		agg.models = unique(agg.models);
-		agg.sources = unique(agg.sources) as Source[];
+		agg.sources = sortSources(unique(agg.sources) as Source[]);
 	}
 
 	return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export function aggregateDailyBySource(events: UnifiedTokenEvent[]): DailySourceAggregation[] {
+	const map = new Map<string, DailySourceAggregation>();
+
+	for (const e of events) {
+		const date = dateKey(e.timestamp);
+		const key = `${date}:${e.source}`;
+		let agg = map.get(key);
+		if (!agg) {
+			agg = {
+				date,
+				source: e.source,
+				tokens: emptyTokens(),
+				costUSD: 0,
+				eventCount: 0,
+			};
+			map.set(key, agg);
+		}
+		agg.tokens = addTokens(agg.tokens, e.tokens);
+		agg.costUSD += e.costUSD;
+		agg.eventCount++;
+	}
+
+	return [...map.values()].sort((a, b) => {
+		if (a.date === b.date) return sourceRank(a.source) - sourceRank(b.source);
+		return a.date.localeCompare(b.date);
+	});
+}
+
+export function aggregateDailyByModel(events: UnifiedTokenEvent[]): DailyModelAggregation[] {
+	const map = new Map<string, DailyModelAggregation>();
+
+	for (const e of events) {
+		const date = dateKey(e.timestamp);
+		const key = `${date}:${e.model}`;
+		let agg = map.get(key);
+		if (!agg) {
+			agg = {
+				date,
+				model: e.model,
+				tokens: emptyTokens(),
+				costUSD: 0,
+				sources: [],
+				eventCount: 0,
+			};
+			map.set(key, agg);
+		}
+		agg.tokens = addTokens(agg.tokens, e.tokens);
+		agg.costUSD += e.costUSD;
+		agg.sources.push(e.source);
+		agg.eventCount++;
+	}
+
+	for (const agg of map.values()) {
+		agg.sources = sortSources(unique(agg.sources) as Source[]);
+	}
+
+	return [...map.values()].sort((a, b) => {
+		if (a.date === b.date) return a.model.localeCompare(b.model);
+		return a.date.localeCompare(b.date);
+	});
+}
+
+export function aggregateDailyBySourceModel(events: UnifiedTokenEvent[]): DailySourceModelAggregation[] {
+	const map = new Map<string, DailySourceModelAggregation>();
+
+	for (const e of events) {
+		const date = dateKey(e.timestamp);
+		const key = `${date}:${e.source}:${e.model}`;
+		let agg = map.get(key);
+		if (!agg) {
+			agg = {
+				date,
+				source: e.source,
+				model: e.model,
+				tokens: emptyTokens(),
+				costUSD: 0,
+				eventCount: 0,
+			};
+			map.set(key, agg);
+		}
+		agg.tokens = addTokens(agg.tokens, e.tokens);
+		agg.costUSD += e.costUSD;
+		agg.eventCount++;
+	}
+
+	return [...map.values()].sort((a, b) => {
+		if (a.date !== b.date) return a.date.localeCompare(b.date);
+		if (a.source !== b.source) return sourceRank(a.source) - sourceRank(b.source);
+		return a.model.localeCompare(b.model);
+	});
 }
 
 export function aggregateMonthly(events: UnifiedTokenEvent[]): MonthlyAggregation[] {
@@ -80,7 +195,7 @@ export function aggregateMonthly(events: UnifiedTokenEvent[]): MonthlyAggregatio
 
 	for (const agg of map.values()) {
 		agg.models = unique(agg.models);
-		agg.sources = unique(agg.sources) as Source[];
+		agg.sources = sortSources(unique(agg.sources) as Source[]);
 	}
 
 	return [...map.values()].sort((a, b) => a.month.localeCompare(b.month));
@@ -114,6 +229,37 @@ export function aggregateBySource(events: UnifiedTokenEvent[]): SourceAggregatio
 	return [...map.values()].sort((a, b) => b.costUSD - a.costUSD);
 }
 
+export function aggregateByProject(events: UnifiedTokenEvent[]): ProjectAggregation[] {
+	const map = new Map<string, ProjectAggregation>();
+
+	for (const e of events) {
+		const project = normalizedProjectName(e.project);
+		if (!project) continue;
+
+		let agg = map.get(project);
+		if (!agg) {
+			agg = {
+				project,
+				tokens: emptyTokens(),
+				costUSD: 0,
+				sources: [],
+				eventCount: 0,
+			};
+			map.set(project, agg);
+		}
+		agg.tokens = addTokens(agg.tokens, e.tokens);
+		agg.costUSD += e.costUSD;
+		agg.sources.push(e.source);
+		agg.eventCount++;
+	}
+
+	for (const agg of map.values()) {
+		agg.sources = sortSources(unique(agg.sources) as Source[]);
+	}
+
+	return [...map.values()].sort((a, b) => b.costUSD - a.costUSD);
+}
+
 export function aggregateByModel(events: UnifiedTokenEvent[]): ModelAggregation[] {
 	const map = new Map<string, ModelAggregation>();
 
@@ -136,10 +282,38 @@ export function aggregateByModel(events: UnifiedTokenEvent[]): ModelAggregation[
 	}
 
 	for (const agg of map.values()) {
-		agg.sources = unique(agg.sources) as Source[];
+		agg.sources = sortSources(unique(agg.sources) as Source[]);
 	}
 
 	return [...map.values()].sort((a, b) => b.costUSD - a.costUSD);
+}
+
+export function aggregateBySourceModel(events: UnifiedTokenEvent[]): SourceModelAggregation[] {
+	const map = new Map<string, SourceModelAggregation>();
+
+	for (const e of events) {
+		const key = `${e.source}:${e.model}`;
+		let agg = map.get(key);
+		if (!agg) {
+			agg = {
+				source: e.source,
+				model: e.model,
+				tokens: emptyTokens(),
+				costUSD: 0,
+				eventCount: 0,
+			};
+			map.set(key, agg);
+		}
+		agg.tokens = addTokens(agg.tokens, e.tokens);
+		agg.costUSD += e.costUSD;
+		agg.eventCount++;
+	}
+
+	return [...map.values()].sort((a, b) => {
+		if (a.costUSD !== b.costUSD) return b.costUSD - a.costUSD;
+		if (a.source !== b.source) return sourceRank(a.source) - sourceRank(b.source);
+		return a.model.localeCompare(b.model);
+	});
 }
 
 export function aggregateHeatmap(events: UnifiedTokenEvent[]): HeatmapCell[] {
@@ -161,9 +335,14 @@ export function aggregateHeatmap(events: UnifiedTokenEvent[]): HeatmapCell[] {
 
 export function buildDashboardData(events: UnifiedTokenEvent[]): DashboardData {
 	const daily = aggregateDaily(events);
+	const dailyBySource = aggregateDailyBySource(events);
+	const dailyByModel = aggregateDailyByModel(events);
+	const dailyBySourceModel = aggregateDailyBySourceModel(events);
 	const monthly = aggregateMonthly(events);
 	const bySource = aggregateBySource(events);
 	const byModel = aggregateByModel(events);
+	const bySourceModel = aggregateBySourceModel(events);
+	const byProject = aggregateByProject(events);
 	const heatmap = aggregateHeatmap(events);
 
 	const totals = events.reduce(
@@ -189,9 +368,14 @@ export function buildDashboardData(events: UnifiedTokenEvent[]): DashboardData {
 			topSource,
 		},
 		daily,
+		dailyBySource,
+		dailyByModel,
+		dailyBySourceModel,
 		monthly,
 		bySource,
 		byModel,
+		bySourceModel,
+		byProject,
 		heatmap,
 	};
 }

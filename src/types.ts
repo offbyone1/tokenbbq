@@ -27,6 +27,32 @@ export interface DailyAggregation {
 	eventCount: number;
 }
 
+export interface DailySourceAggregation {
+	date: string;
+	source: Source;
+	tokens: TokenCounts;
+	costUSD: number;
+	eventCount: number;
+}
+
+export interface DailyModelAggregation {
+	date: string;
+	model: string;
+	tokens: TokenCounts;
+	costUSD: number;
+	sources: Source[];
+	eventCount: number;
+}
+
+export interface DailySourceModelAggregation {
+	date: string;
+	source: Source;
+	model: string;
+	tokens: TokenCounts;
+	costUSD: number;
+	eventCount: number;
+}
+
 export interface MonthlyAggregation {
 	month: string;
 	tokens: TokenCounts;
@@ -52,6 +78,22 @@ export interface ModelAggregation {
 	eventCount: number;
 }
 
+export interface SourceModelAggregation {
+	source: Source;
+	model: string;
+	tokens: TokenCounts;
+	costUSD: number;
+	eventCount: number;
+}
+
+export interface ProjectAggregation {
+	project: string;
+	tokens: TokenCounts;
+	costUSD: number;
+	sources: Source[];
+	eventCount: number;
+}
+
 export interface HeatmapCell {
 	date: string;
 	totalTokens: number;
@@ -70,9 +112,14 @@ export interface DashboardData {
 		topSource: Source | null;
 	};
 	daily: DailyAggregation[];
+	dailyBySource: DailySourceAggregation[];
+	dailyByModel: DailyModelAggregation[];
+	dailyBySourceModel: DailySourceModelAggregation[];
 	monthly: MonthlyAggregation[];
 	bySource: SourceAggregation[];
 	byModel: ModelAggregation[];
+	bySourceModel: SourceModelAggregation[];
+	byProject: ProjectAggregation[];
 	heatmap: HeatmapCell[];
 }
 
@@ -91,7 +138,7 @@ export function addTokens(a: TokenCounts, b: TokenCounts): TokenCounts {
 }
 
 export function totalTokenCount(t: TokenCounts): number {
-	return t.input + t.output + t.cacheCreation + t.cacheRead;
+	return t.input + t.output + t.cacheCreation + t.cacheRead + t.reasoning;
 }
 
 export const SOURCE_LABELS: Record<Source, string> = {
@@ -103,8 +150,8 @@ export const SOURCE_LABELS: Record<Source, string> = {
 };
 
 export const SOURCE_COLORS: Record<Source, string> = {
-	'claude-code': '#E87B35',
-	codex: '#10A37F',
+	'claude-code': '#c15f3c',
+	codex: '#74aa9c',
 	opencode: '#6366F1',
 	amp: '#F59E0B',
 	pi: '#8B5CF6',

@@ -2,14 +2,19 @@ node_modules/
 dist/
 *.tgz
 
-# Reference repo (not part of this project)
+# Reference repos (not part of this project)
 ccusage/
+tokenbbq/
 
 # IDE
 .vscode/
 .idea/
+.easyide/
 *.swp
 *.swo
+
+# Landing page
+landing/
 
 # OS
 .DS_Store

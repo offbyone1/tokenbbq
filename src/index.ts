@@ -1,4 +1,7 @@
 import pc from 'picocolors';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import path from 'node:path';
 import { loadAll } from './loaders/index.js';
 import { enrichCosts } from './pricing.js';
 import { buildDashboardData } from './aggregator.js';
@@ -38,6 +41,35 @@ ${pc.cyan('Supported Tools:')}
   Amp            ~/.local/share/amp/threads/**/*.json
   Pi-Agent       ~/.pi/agent/sessions/**/*.jsonl
 `);
+}
+
+function getDashboardBrandLogoPath(): string | null {
+	const envPath = (process.env.TOKENBBQ_LOGO_PATH ?? '').trim();
+	if (envPath !== '') {
+		const resolved = path.resolve(envPath);
+		if (existsSync(resolved)) return resolved;
+	}
+
+	const candidates = [
+		path.join(homedir(), 'Downloads', 'tokenbbq.png'),
+		'C:\\download\\tokenbbq.png',
+		'C:\\Download\\tokenbbq.png',
+	];
+
+	for (const candidate of candidates) {
+		if (existsSync(candidate)) return candidate;
+	}
+
+	return null;
+}
+
+async function reloadDashboardData(): Promise<ReturnType<typeof buildDashboardData>> {
+	const { events } = await loadAll(true);
+	if (events.length === 0) {
+		throw new Error('No usage data found');
+	}
+	await enrichCosts(events);
+	return buildDashboardData(events);
 }
 
 async function main(): Promise<void> {
@@ -89,7 +121,12 @@ async function main(): Promise<void> {
 		case 'dashboard':
 		default:
 			printSummary(data);
-			await startServer(data, { port, open: !noOpen });
+			await startServer(data, {
+				port,
+				open: !noOpen,
+				getData: reloadDashboardData,
+				brandLogoPath: getDashboardBrandLogoPath(),
+			});
 			break;
 	}
 }

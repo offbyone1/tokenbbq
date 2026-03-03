@@ -112,15 +112,19 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 			if (!timestamp) continue;
 
 			const info = payload.info as Record<string, unknown> | undefined;
-			const lastUsage = normalizeUsage(info?.last_token_usage);
 			const totalUsage = normalizeUsage(info?.total_token_usage);
+			const lastUsage = normalizeUsage(info?.last_token_usage);
 
-			let raw = lastUsage;
-			if (!raw && totalUsage) {
+			if (!totalUsage) continue;
+
+			let raw: RawUsage;
+			if (prevTotals === null) {
+				raw = lastUsage ?? totalUsage;
+			} else {
 				raw = subtractUsage(totalUsage, prevTotals);
 			}
-			if (totalUsage) prevTotals = totalUsage;
-			if (!raw) continue;
+			prevTotals = totalUsage;
+			if (raw.input === 0 && raw.output === 0 && raw.cached === 0) continue;
 
 			if (raw.input === 0 && raw.output === 0) continue;
 
