@@ -4,7 +4,6 @@ import { SOURCE_LABELS } from '../types.js';
 import { loadClaudeEvents } from './claude.js';
 import { loadCodexEvents } from './codex.js';
 import { loadGeminiEvents } from './gemini.js';
-import { loadAntigravityEvents } from './antigravity.js';
 import { loadOpenCodeEvents } from './opencode.js';
 import { loadAmpEvents } from './amp.js';
 import { loadPiEvents } from './pi.js';
@@ -18,7 +17,6 @@ const LOADERS: LoaderEntry[] = [
 	{ source: 'claude-code', load: loadClaudeEvents },
 	{ source: 'codex', load: loadCodexEvents },
 	{ source: 'gemini', load: loadGeminiEvents },
-	{ source: 'antigravity', load: loadAntigravityEvents },
 	{ source: 'opencode', load: loadOpenCodeEvents },
 	{ source: 'amp', load: loadAmpEvents },
 	{ source: 'pi', load: loadPiEvents },

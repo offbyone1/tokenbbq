@@ -19,7 +19,6 @@ const SOURCE_ORDER: Source[] = [
 	'claude-code',
 	'codex',
 	'gemini',
-	'antigravity',
 	'opencode',
 	'amp',
 	'pi',
