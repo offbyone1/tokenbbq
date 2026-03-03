@@ -3,6 +3,7 @@ import type { Source, UnifiedTokenEvent } from '../types.js';
 import { SOURCE_LABELS } from '../types.js';
 import { loadClaudeEvents } from './claude.js';
 import { loadCodexEvents } from './codex.js';
+import { loadGeminiEvents } from './gemini.js';
 import { loadOpenCodeEvents } from './opencode.js';
 import { loadAmpEvents } from './amp.js';
 import { loadPiEvents } from './pi.js';
@@ -15,6 +16,7 @@ type LoaderEntry = {
 const LOADERS: LoaderEntry[] = [
 	{ source: 'claude-code', load: loadClaudeEvents },
 	{ source: 'codex', load: loadCodexEvents },
+	{ source: 'gemini', load: loadGeminiEvents },
 	{ source: 'opencode', load: loadOpenCodeEvents },
 	{ source: 'amp', load: loadAmpEvents },
 	{ source: 'pi', load: loadPiEvents },

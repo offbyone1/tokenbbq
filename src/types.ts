@@ -1,4 +1,10 @@
-export type Source = 'claude-code' | 'codex' | 'opencode' | 'amp' | 'pi';
+export type Source =
+	| 'claude-code'
+	| 'codex'
+	| 'gemini'
+	| 'opencode'
+	| 'amp'
+	| 'pi';
 
 export interface TokenCounts {
 	input: number;
@@ -144,6 +150,7 @@ export function totalTokenCount(t: TokenCounts): number {
 export const SOURCE_LABELS: Record<Source, string> = {
 	'claude-code': 'Claude Code',
 	codex: 'Codex',
+	gemini: 'Gemini',
 	opencode: 'OpenCode',
 	amp: 'Amp',
 	pi: 'Pi-Agent',
@@ -152,6 +159,7 @@ export const SOURCE_LABELS: Record<Source, string> = {
 export const SOURCE_COLORS: Record<Source, string> = {
 	'claude-code': '#c15f3c',
 	codex: '#74aa9c',
+	gemini: '#1A73E8',
 	opencode: '#6366F1',
 	amp: '#F59E0B',
 	pi: '#8B5CF6',
