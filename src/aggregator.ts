@@ -15,7 +15,15 @@ import type {
 } from './types.js';
 import { emptyTokens, addTokens, totalTokenCount } from './types.js';
 
-const SOURCE_ORDER: Source[] = ['claude-code', 'codex', 'opencode', 'amp', 'pi'];
+const SOURCE_ORDER: Source[] = [
+	'claude-code',
+	'codex',
+	'gemini',
+	'antigravity',
+	'opencode',
+	'amp',
+	'pi',
+];
 
 function dateKey(timestamp: string): string {
 	return new Date(timestamp).toISOString().slice(0, 10);
@@ -226,7 +234,13 @@ export function aggregateBySource(events: UnifiedTokenEvent[]): SourceAggregatio
 		agg.models = unique(agg.models);
 	}
 
-	return [...map.values()].sort((a, b) => b.costUSD - a.costUSD);
+	return [...map.values()].sort((a, b) => {
+		if (a.costUSD !== b.costUSD) return b.costUSD - a.costUSD;
+		const tokenDiff = totalTokenCount(b.tokens) - totalTokenCount(a.tokens);
+		if (tokenDiff !== 0) return tokenDiff;
+		if (a.eventCount !== b.eventCount) return b.eventCount - a.eventCount;
+		return sourceRank(a.source) - sourceRank(b.source);
+	});
 }
 
 export function aggregateByProject(events: UnifiedTokenEvent[]): ProjectAggregation[] {

@@ -37,6 +37,8 @@ ${pc.cyan('Options:')}
 ${pc.cyan('Supported Tools:')}
   Claude Code    ~/.claude/projects/**/*.jsonl
   Codex          ~/.codex/sessions/**/*.jsonl
+  Gemini         ~/.gemini/tmp/**/chats/session-*.json
+  Antigravity    %APPDATA%/Antigravity/logs/**/google.antigravity/Antigravity.log
   OpenCode       ~/.local/share/opencode/storage/**/*.json
   Amp            ~/.local/share/amp/threads/**/*.json
   Pi-Agent       ~/.pi/agent/sessions/**/*.jsonl
