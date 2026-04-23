@@ -92,6 +92,13 @@ export interface SourceModelAggregation {
 	eventCount: number;
 }
 
+export interface ProjectSourceBreakdown {
+	source: Source;
+	tokens: TokenCounts;
+	costUSD: number;
+	eventCount: number;
+}
+
 export interface ProjectAggregation {
 	project: string;
 	projectPath: string;
@@ -100,6 +107,7 @@ export interface ProjectAggregation {
 	sources: Source[];
 	eventCount: number;
 	lastActive: string;  // YYYY-MM-DD of latest event
+	perSource: ProjectSourceBreakdown[];
 }
 
 export interface HeatmapCell {

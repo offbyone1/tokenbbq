@@ -54,4 +54,42 @@ describe('aggregateByProject', () => {
     ]);
     assert.equal(out.length, 0);
   });
+
+  test('perSource breakdown has one entry per contributing source, sorted by tokens desc', () => {
+    const events = [
+      ev({ project: 'P', source: 'claude-code', tokens: { input: 1000, output: 2000, cacheCreation: 0, cacheRead: 0, reasoning: 0 } }),
+      ev({ project: 'P', source: 'claude-code', tokens: { input: 500, output: 1000, cacheCreation: 0, cacheRead: 0, reasoning: 0 } }),
+      ev({ project: 'P', source: 'codex', tokens: { input: 100, output: 200, cacheCreation: 0, cacheRead: 0, reasoning: 0 } }),
+      ev({ project: 'P', source: 'opencode', tokens: { input: 50, output: 100, cacheCreation: 0, cacheRead: 0, reasoning: 0 } }),
+    ];
+    const out = aggregateByProject(events);
+    const p = out.find(x => x.project === 'P');
+    assert.ok(p);
+    assert.equal(p.perSource.length, 3);
+    // sorted by tokens desc — claude-code first (4500), codex (300), opencode (150)
+    assert.equal(p.perSource[0].source, 'claude-code');
+    assert.equal(p.perSource[1].source, 'codex');
+    assert.equal(p.perSource[2].source, 'opencode');
+    assert.equal(p.perSource[0].eventCount, 2);
+    assert.equal(p.perSource[1].eventCount, 1);
+    // token sums match
+    const cc = p.perSource[0];
+    assert.equal(cc.tokens.input, 1500);
+    assert.equal(cc.tokens.output, 3000);
+  });
+
+  test('perSource cost sums correctly per source', () => {
+    const events = [
+      ev({ project: 'Q', source: 'claude-code', costUSD: 1.5 }),
+      ev({ project: 'Q', source: 'claude-code', costUSD: 2.5 }),
+      ev({ project: 'Q', source: 'codex', costUSD: 0.75 }),
+    ];
+    const out = aggregateByProject(events);
+    const p = out.find(x => x.project === 'Q');
+    assert.ok(p);
+    const cc = p.perSource.find(s => s.source === 'claude-code');
+    const cx = p.perSource.find(s => s.source === 'codex');
+    assert.equal(cc?.costUSD, 4);
+    assert.equal(cx?.costUSD, 0.75);
+  });
 });

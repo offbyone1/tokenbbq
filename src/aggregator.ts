@@ -9,6 +9,7 @@ import type {
 	ModelAggregation,
 	SourceModelAggregation,
 	ProjectAggregation,
+	ProjectSourceBreakdown,
 	HeatmapCell,
 	DashboardData,
 	Source,
@@ -255,6 +256,7 @@ export function aggregateByProject(events: UnifiedTokenEvent[]): ProjectAggregat
 				sources: [],
 				eventCount: 0,
 				lastActive: dateKey(e.timestamp),
+				perSource: [],
 			};
 			map.set(project, agg);
 		}
@@ -264,10 +266,20 @@ export function aggregateByProject(events: UnifiedTokenEvent[]): ProjectAggregat
 		agg.eventCount++;
 		const date = dateKey(e.timestamp);
 		if (date > agg.lastActive) agg.lastActive = date;
+
+		let srcEntry = agg.perSource.find(s => s.source === e.source);
+		if (!srcEntry) {
+			srcEntry = { source: e.source, tokens: emptyTokens(), costUSD: 0, eventCount: 0 };
+			agg.perSource.push(srcEntry);
+		}
+		srcEntry.tokens = addTokens(srcEntry.tokens, e.tokens);
+		srcEntry.costUSD += e.costUSD;
+		srcEntry.eventCount += 1;
 	}
 
 	for (const agg of map.values()) {
 		agg.sources = sortSources(unique(agg.sources) as Source[]);
+		agg.perSource.sort((a, b) => totalTokenCount(b.tokens) - totalTokenCount(a.tokens));
 	}
 
 	return [...map.values()].sort((a, b) => {
