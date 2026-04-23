@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { glob } from 'tinyglobby';
 import type { UnifiedTokenEvent } from '../types.js';
+import { resolveProjectRoot } from '../project.js';
 
 const HOME = homedir();
 
@@ -68,10 +69,6 @@ export async function loadClaudeEvents(): Promise<UnifiedTokenEvent[]> {
 		const files = await glob('**/*.jsonl', { cwd: projectsDir, absolute: true });
 
 		for (const file of files) {
-			const relPath = path.relative(projectsDir, file);
-			const parts = relPath.split(path.sep);
-			const project = parts.length >= 2 ? parts.slice(0, -1).join('/') : 'unknown';
-
 			let content: string;
 			try {
 				content = await readFile(file, 'utf-8');
@@ -96,7 +93,13 @@ export async function loadClaudeEvents(): Promise<UnifiedTokenEvent[]> {
 				if (!event) continue;
 
 				event.sessionId = sessionId;
-				event.project = project;
+				// cwd can change mid-session (user cd's); we honor the cwd at each event.
+				const cwd = typeof parsed.cwd === 'string' ? parsed.cwd : undefined;
+				if (cwd) {
+					event.project = resolveProjectRoot(cwd).name;
+				}
+				// No fallback: if cwd is absent, event.project stays undefined and the event
+				// is excluded from per-project aggregation (but still counts toward totals).
 
 				const requestId = String(parsed.requestId ?? '');
 				const messageId = String((parsed.message as Record<string, unknown>)?.id ?? '');
