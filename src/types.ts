@@ -94,10 +94,12 @@ export interface SourceModelAggregation {
 
 export interface ProjectAggregation {
 	project: string;
+	projectPath: string;
 	tokens: TokenCounts;
 	costUSD: number;
 	sources: Source[];
 	eventCount: number;
+	lastActive: string;  // YYYY-MM-DD of latest event
 }
 
 export interface HeatmapCell {
