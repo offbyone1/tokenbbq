@@ -16,13 +16,21 @@ This spec covers (1) reliably extracting the project from every source's raw dat
 
 **A project is one existing directory on the user's filesystem.** The project's internal identifier is the absolute path of that directory; the display name is the directory's basename.
 
-**Root resolution:** For a given `cwd`, walk up the tree until a directory containing any of these markers is found. Git is one marker among many — a project without Git is handled identically to one with Git.
+**Root resolution:** For a given `cwd`, walk up the tree to the boundary (`$HOME` or the drive/filesystem root — we never ascend above those). Collect every directory along the walk that contains **any** of the following markers:
 
 - VCS: `.git`, `.hg`, `.svn`
-- Package manifests: `package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`, `pom.xml`, `*.csproj`
-- Common top-level files: `README.md`, `.gitignore`, `CHANGELOG.md`
+- Manifests: `package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`, `pom.xml`, `*.csproj`
 
-The walk stops at the user's home directory and at the filesystem root — we never ascend above `$HOME` or above a drive letter on Windows. If no marker is found within those bounds, the `cwd` itself is the project root.
+All markers are equal weight — a project with just `package.json` (local, no Git) is treated exactly like a Git repo. The resolver picks the **outermost** marker-bearing directory on the walk; that directory is the project root.
+
+If no marker exists anywhere on the walk, the `cwd` itself is the project root.
+
+Rationale for "outermost":
+- Working in `C:\Repos\NanoGolf\server\` (where `server/` has its own `package.json` and `NanoGolf` has `.git` or `package.json`) rolls up to `NanoGolf`. All work in any subfolder of NanoGolf counts toward `NanoGolf`.
+- Working in a monorepo `C:\Repos\MegaApp\packages\frontend\` rolls up to `MegaApp`. Subpackages are not separate projects; they are parts of MegaApp.
+- Working in a local-only tool `C:\Tools\MyScript\src\` where only `MyScript/` has `package.json` rolls up to `MyScript` — Git is not required.
+
+Note: `README.md`, `.gitignore`, `CHANGELOG.md` are **not** markers. They are too weak a signal (many random folders contain them, including `$HOME`) and led to false positives.
 
 **Display name:** `path.basename(projectRoot)`. No path components, no slashes, no hashes, no URL-encoded folder names.
 
@@ -84,7 +92,9 @@ A new section inserted **between** the activity heatmap and the daily breakdown 
 
 **Sorting:** default is Tokens descending. Every column header is clickable to re-sort, matching the existing daily-breakdown behavior.
 
-**Row expansion:** out of scope. Can be added later if detail (per-provider split, top model) is wanted.
+**Collapse/expand at list level:** Only the **top 5** projects (after sort) are rendered by default. A `Show all (N)` button below the table reveals the rest; clicking it again collapses back to 5. The button is hidden when total projects ≤ 5.
+
+**Row expansion (per project):** Each project row is clickable. Clicking opens an expanded sub-row directly beneath it with a per-provider breakdown — one line per source that contributed to the project, showing Provider, Tokens, Cost, Events for that source within that project. Clicking the project row again collapses. Multiple rows can be expanded simultaneously. This mirrors the Daily Breakdown's existing expand-on-click pattern (using a `▸` triangle indicator that rotates when open).
 
 **Empty state:** if zero projects are detected, the section renders a muted `No project information yet.` line. The section is not hidden — its presence signals that the feature exists.
 
@@ -93,6 +103,13 @@ A new section inserted **between** the activity heatmap and the daily breakdown 
 `UnifiedTokenEvent.project` stays optional. Aggregation is extended:
 
 ```ts
+interface ProjectSourceBreakdown {
+  source: Source;
+  tokens: TokenCounts;
+  costUSD: number;
+  eventCount: number;
+}
+
 interface ProjectAggregation {
   project: string;          // display name (basename)
   projectPath: string;      // absolute path — stable key, used for collision disambiguation
@@ -101,6 +118,7 @@ interface ProjectAggregation {
   sources: Source[];
   eventCount: number;
   lastActive: string;       // ISO date of most recent event (YYYY-MM-DD)
+  perSource: ProjectSourceBreakdown[];  // one entry per source that contributed, sorted by tokens desc — powers the row-expand UI
 }
 ```
 
