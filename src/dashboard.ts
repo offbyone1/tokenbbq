@@ -1453,16 +1453,16 @@ function buildTopModelPopup(data) {
 function buildDailyChartPopup(data) {
   const daily = data.daily;
   if (!daily.length) return '<div style="color:#6b7280;padding:16px 0">No data in range</div>';
-  
+
   const sorted = [...daily].sort((a, b) => a.date.localeCompare(b.date));
-  
+
   let html = '';
-  html += '<div style="background:rgba(0,0,0,0.2);padding:16px;border-radius:12px;margin:12px 0">'
-    + '<div style="font-size:12px;color:#9ca3af;margin-bottom:8px">Token volume timeline</div>';
-  if (sorted.length > 2) {
-    html += pSparkline(sorted.map(d => sumTokens(d.tokens)), '#60a5fa', 60);
-  }
-  html += '</div>';
+
+  // Hero: Area chart with brand-orange gradient (rendered after insertion — see Task 9).
+  html += '<div style="background:rgba(0,0,0,0.2);padding:16px;border-radius:12px;margin:12px 0 16px">'
+    + '<div style="font-size:12px;color:#9ca3af;margin-bottom:8px">Token volume timeline</div>'
+    + '<canvas id="popupDailyChart" height="220" style="max-height:220px"></canvas>'
+    + '</div>';
 
   const weekMap = {};
   daily.forEach(d => {
@@ -1476,17 +1476,23 @@ function buildDailyChartPopup(data) {
   const weeks = Object.entries(weekMap).sort();
   const bestWeek = weeks.length ? weeks.reduce((b, w) => w[1].tokens > b[1].tokens ? w : b, weeks[0]) : null;
 
+  const avgDaily = Math.round(data.totals.totalTokens / Math.max(daily.length, 1));
   html += '<div class="p-stat-grid cols-2">'
-    + pStatCard('Avg Daily Tokens', fmt(Math.round(data.totals.totalTokens / Math.max(daily.length, 1))), '#a78bfa')
-    + pStatCard('Busiest Week', bestWeek ? fmt(bestWeek[1].tokens) : '0', '#f87171', bestWeek ? 'Week of ' + bestWeek[0] : '')
+    + pStatCard('Avg Daily Tokens', fmtTokens(avgDaily), BRAND_COLORS.primary)
+    + pStatCard('Busiest Week', bestWeek ? fmtTokens(bestWeek[1].tokens) : '0', SOURCE_COLORS['claude-code'], bestWeek ? 'Week of ' + bestWeek[0] : '')
     + '</div>';
 
   html += pSection('Token Volume by Day of Week');
   const dow = computeDayOfWeek(daily);
   const maxDow = Math.max(...dow.map(d => d.avgTokens), 1);
   dow.forEach(d => {
-    html += pBarRow(d.name, fmt(Math.round(d.avgTokens)), d.avgTokens / maxDow, '#60a5fa');
+    html += pBarRow(d.name, fmtTokens(Math.round(d.avgTokens)), d.avgTokens / maxDow, BRAND_COLORS.primary);
   });
+
+  // Stage hero data for showPopup to pick up
+  html += '<script data-popup-hero="daily">'
+    + 'window.__popupHeroData = { kind: "daily", values: ' + JSON.stringify(sorted.map(d => sumTokens(d.tokens))) + ', labels: ' + JSON.stringify(sorted.map(d => d.date)) + ' };'
+    + '<\\/script>';
 
   return html;
 }
