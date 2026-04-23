@@ -312,6 +312,11 @@ tailwind.config = {
         <tbody id="projectsTableBody"></tbody>
       </table>
     </div>
+      <div class="mt-3 flex justify-center">
+        <button id="projectsToggleAll" class="text-sm text-gray-400 hover:text-white dark:hover:text-white light:hover:text-gray-900 transition-colors hidden">
+          Show all
+        </button>
+      </div>
   </div>
 
   <!-- Daily Table -->
@@ -374,6 +379,8 @@ let modelChartInstance = null;
 let monthlyChartInstance = null;
 let currentSort = { key: 'date', dir: 'desc' };
 let currentProjSort = { key: 'tokens', dir: 'desc' };
+let projectsExpanded = false;
+const expandedProjects = new Set();
 let currentTimeFilter = '90';
 let selectedTableSources = new Set();
 let tableSourceFilterDirty = false;
@@ -1043,11 +1050,12 @@ function totalProjectTokens(p) {
 
 function renderProjects(data) {
   const tbody = document.getElementById('projectsTableBody');
+  const toggleBtn = document.getElementById('projectsToggleAll');
   tbody.innerHTML = '';
 
-  const rows = (data.byProject || []).slice();
+  const all = (data.byProject || []).slice();
   const dir = currentProjSort.dir === 'asc' ? 1 : -1;
-  rows.sort((a, b) => {
+  all.sort((a, b) => {
     switch (currentProjSort.key) {
       case 'project': return dir * a.project.localeCompare(b.project);
       case 'tokens':  return dir * (totalProjectTokens(a) - totalProjectTokens(b));
@@ -1058,12 +1066,25 @@ function renderProjects(data) {
     }
   });
 
+  // sort indicators on headers
   document.querySelectorAll('[data-proj-sort]').forEach(btn => {
     btn.classList.remove('sort-asc', 'sort-desc');
     if (btn.dataset.projSort === currentProjSort.key) {
       btn.classList.add(currentProjSort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
     }
   });
+
+  // toggle button visibility + label
+  if (all.length <= 5) {
+    toggleBtn.classList.add('hidden');
+  } else {
+    toggleBtn.classList.remove('hidden');
+    toggleBtn.textContent = projectsExpanded
+      ? 'Show top 5'
+      : 'Show all (' + all.length + ')';
+  }
+
+  const rows = projectsExpanded ? all : all.slice(0, 5);
 
   if (rows.length === 0) {
     const tr = document.createElement('tr');
@@ -1079,16 +1100,47 @@ function renderProjects(data) {
       (SOURCE_LABELS[s] || s) + '</span>'
     ).join(' ');
 
+    const isOpen = expandedProjects.has(p.projectPath || p.project);
     const tr = document.createElement('tr');
-    tr.className = 'border-b border-border/50 hover:bg-white/5 dark:hover:bg-white/5 light:hover:bg-gray-100 transition-colors';
+    tr.className = 'project-parent-row border-b border-border/50 hover:bg-white/5 dark:hover:bg-white/5 light:hover:bg-gray-100 transition-colors cursor-pointer';
+    tr.dataset.projKey = p.projectPath || p.project;
+    tr.title = isOpen ? 'Click to collapse provider breakdown' : 'Click to expand provider breakdown';
     tr.innerHTML =
-      '<td class="py-2 px-3 text-gray-200 dark:text-gray-200 light:text-gray-800">' + escapeHtml(p.project) + '</td>' +
+      '<td class="py-2 px-3 text-gray-200 dark:text-gray-200 light:text-gray-800"><span class="inline-flex items-center gap-2"><span class="daily-row-toggle' + (isOpen ? ' open' : '') + '">▸</span><span>' + escapeHtml(p.project) + '</span></span></td>' +
       '<td class="py-2 px-3">' + chips + '</td>' +
       '<td class="py-2 px-3 text-right text-gray-300 dark:text-gray-300 light:text-gray-700">' + fmt(totalProjectTokens(p)) + '</td>' +
       '<td class="py-2 px-3 text-right text-gray-300 dark:text-gray-300 light:text-gray-700">' + fmtUSD(p.costUSD) + '</td>' +
       '<td class="py-2 px-3 text-right text-gray-300 dark:text-gray-300 light:text-gray-700">' + fmt(p.eventCount) + '</td>' +
       '<td class="py-2 px-3 text-right text-gray-400 dark:text-gray-400 light:text-gray-600">' + escapeHtml(p.lastActive) + '</td>';
     tbody.appendChild(tr);
+
+    if (isOpen) {
+      const perSource = p.perSource || [];
+      if (perSource.length === 0) {
+        const emptyTr = document.createElement('tr');
+        emptyTr.className = 'bg-black/10 dark:bg-black/20 light:bg-gray-50 border-b border-border/30';
+        emptyTr.innerHTML = '<td colspan="6" class="py-2 px-3 pl-12 text-xs text-gray-500">No per-source breakdown available.</td>';
+        tbody.appendChild(emptyTr);
+      } else {
+        for (const s of perSource) {
+          const tot = (s.tokens.input||0) + (s.tokens.output||0) + (s.tokens.cacheCreation||0) + (s.tokens.cacheRead||0) + (s.tokens.reasoning||0);
+          const chip =
+            '<span class="inline-block px-1.5 py-0.5 rounded text-xs" style="background:' +
+            SOURCE_COLORS[s.source] + '22;color:' + SOURCE_COLORS[s.source] + '">' +
+            (SOURCE_LABELS[s.source] || s.source) + '</span>';
+          const subTr = document.createElement('tr');
+          subTr.className = 'project-subrow bg-black/10 dark:bg-black/20 light:bg-gray-50 border-b border-border/30';
+          subTr.innerHTML =
+            '<td></td>' +
+            '<td class="py-1.5 px-3 text-xs">' + chip + '</td>' +
+            '<td class="py-1.5 px-3 text-right text-xs text-gray-300 dark:text-gray-300 light:text-gray-700">' + fmt(tot) + '</td>' +
+            '<td class="py-1.5 px-3 text-right text-xs text-gray-300 dark:text-gray-300 light:text-gray-700">' + fmtUSD(s.costUSD) + '</td>' +
+            '<td class="py-1.5 px-3 text-right text-xs text-gray-300 dark:text-gray-300 light:text-gray-700">' + fmt(s.eventCount) + '</td>' +
+            '<td></td>';
+          tbody.appendChild(subTr);
+        }
+      }
+    }
   }
 }
 
@@ -1119,6 +1171,34 @@ document.querySelectorAll('[data-proj-sort]').forEach(btn => {
     renderProjects(window.__latestData || DATA);
   });
 });
+
+{
+  const toggleBtn = document.getElementById('projectsToggleAll');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      projectsExpanded = !projectsExpanded;
+      renderProjects(window.__latestData || DATA);
+    });
+  }
+}
+
+{
+  const tbody = document.getElementById('projectsTableBody');
+  if (tbody) {
+    tbody.addEventListener('click', (e) => {
+      const row = e.target.closest('.project-parent-row');
+      if (!row) return;
+      const key = row.dataset.projKey;
+      if (!key) return;
+      if (expandedProjects.has(key)) {
+        expandedProjects.delete(key);
+      } else {
+        expandedProjects.add(key);
+      }
+      renderProjects(window.__latestData || DATA);
+    });
+  }
+}
 
 // Initial render
 lastDataSignature = dataSignature(DATA);
