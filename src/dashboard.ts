@@ -345,6 +345,13 @@ let DATA = ${jsonData};
 const SOURCE_COLORS = ${JSON.stringify(SOURCE_COLORS)};
 const SOURCE_LABELS = ${JSON.stringify(SOURCE_LABELS)};
 const SOURCE_ORDER = ['claude-code', 'codex', 'opencode', 'amp', 'pi'];
+const BRAND_COLORS = {
+  primary: '#E87B35',
+  primarySoft: '#E87B3533',
+  primaryGhost: '#E87B3510',
+  trendUp: '#dc6b5c',
+  trendDown: '#74aa9c',
+};
 const LIVE_REFRESH_MS = 5000;
 
 let filteredData = null;
