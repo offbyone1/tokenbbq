@@ -362,6 +362,14 @@ let lastDataSignature = '';
 
 function fmt(n) { return n.toLocaleString('en-US'); }
 function fmtUSD(n) { return '$' + n.toFixed(2); }
+function fmtTokens(n) {
+  if (n == null || isNaN(n)) return '0';
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+  if (abs >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (abs >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return Math.round(n).toLocaleString('en-US');
+}
 function shortModel(m) {
   if (!m || m === 'N/A') return 'N/A';
   return m.replace(/^claude-/, '').replace(/-\\d{8}$/, '').replace(/^\\[pi\\]\\s*/, '[pi] ');
