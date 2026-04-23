@@ -294,6 +294,26 @@ tailwind.config = {
     <div id="heatmap" class="flex gap-[3px] flex-wrap"></div>
   </div>
 
+  <!-- Projects -->
+  <div id="chart-projects" class="bg-card dark:bg-card light:bg-light-card border border-border dark:border-border light:border-light-border rounded-xl p-5 mb-4">
+    <h2 class="text-lg font-semibold text-white dark:text-white light:text-gray-900 mb-4">Projects</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-gray-400 border-b border-border dark:border-border light:border-light-border">
+            <th class="text-left py-2 px-3 sort-btn" data-proj-sort="project">Project</th>
+            <th class="text-left py-2 px-3">Providers</th>
+            <th class="text-right py-2 px-3 sort-btn" data-proj-sort="tokens">Tokens</th>
+            <th class="text-right py-2 px-3 sort-btn" data-proj-sort="cost">Cost</th>
+            <th class="text-right py-2 px-3 sort-btn" data-proj-sort="events">Events</th>
+            <th class="text-right py-2 px-3 sort-btn" data-proj-sort="last">Last Active</th>
+          </tr>
+        </thead>
+        <tbody id="projectsTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Daily Table -->
   <div class="bg-card dark:bg-card light:bg-light-card border border-border dark:border-border light:border-light-border rounded-xl p-5">
     <div class="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
@@ -353,6 +373,7 @@ let sourceChartInstance = null;
 let modelChartInstance = null;
 let monthlyChartInstance = null;
 let currentSort = { key: 'date', dir: 'desc' };
+let currentProjSort = { key: 'tokens', dir: 'desc' };
 let currentTimeFilter = '90';
 let selectedTableSources = new Set();
 let tableSourceFilterDirty = false;
@@ -697,6 +718,8 @@ function updateDashboard(data) {
   renderModelChart(data);
   renderMonthlyChart(data);
   renderHeatmap(data);
+  window.__latestData = data;
+  renderProjects(data);
   renderTableFilters(data);
   renderTable(data);
 }
@@ -1009,9 +1032,70 @@ function renderTable(data) {
   }
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function totalProjectTokens(p) {
+  const t = p.tokens || {};
+  return (t.input || 0) + (t.output || 0) + (t.cacheCreation || 0) + (t.cacheRead || 0) + (t.reasoning || 0);
+}
+
+function renderProjects(data) {
+  const tbody = document.getElementById('projectsTableBody');
+  tbody.innerHTML = '';
+
+  const rows = (data.byProject || []).slice();
+  const dir = currentProjSort.dir === 'asc' ? 1 : -1;
+  rows.sort((a, b) => {
+    switch (currentProjSort.key) {
+      case 'project': return dir * a.project.localeCompare(b.project);
+      case 'tokens':  return dir * (totalProjectTokens(a) - totalProjectTokens(b));
+      case 'cost':    return dir * (a.costUSD - b.costUSD);
+      case 'events':  return dir * (a.eventCount - b.eventCount);
+      case 'last':    return dir * a.lastActive.localeCompare(b.lastActive);
+      default:        return 0;
+    }
+  });
+
+  document.querySelectorAll('[data-proj-sort]').forEach(btn => {
+    btn.classList.remove('sort-asc', 'sort-desc');
+    if (btn.dataset.projSort === currentProjSort.key) {
+      btn.classList.add(currentProjSort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+  });
+
+  if (rows.length === 0) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="6" class="py-4 px-3 text-center text-gray-500">No project information yet.</td>';
+    tbody.appendChild(tr);
+    return;
+  }
+
+  for (const p of rows) {
+    const chips = p.sources.map(s =>
+      '<span class="inline-block px-1.5 py-0.5 rounded text-xs" style="background:' +
+      SOURCE_COLORS[s] + '22;color:' + SOURCE_COLORS[s] + '">' +
+      (SOURCE_LABELS[s] || s) + '</span>'
+    ).join(' ');
+
+    const tr = document.createElement('tr');
+    tr.className = 'border-b border-border/50 hover:bg-white/5 dark:hover:bg-white/5 light:hover:bg-gray-100 transition-colors';
+    tr.innerHTML =
+      '<td class="py-2 px-3 text-gray-200 dark:text-gray-200 light:text-gray-800">' + escapeHtml(p.project) + '</td>' +
+      '<td class="py-2 px-3">' + chips + '</td>' +
+      '<td class="py-2 px-3 text-right text-gray-300 dark:text-gray-300 light:text-gray-700">' + fmt(totalProjectTokens(p)) + '</td>' +
+      '<td class="py-2 px-3 text-right text-gray-300 dark:text-gray-300 light:text-gray-700">' + fmtUSD(p.costUSD) + '</td>' +
+      '<td class="py-2 px-3 text-right text-gray-300 dark:text-gray-300 light:text-gray-700">' + fmt(p.eventCount) + '</td>' +
+      '<td class="py-2 px-3 text-right text-gray-400 dark:text-gray-400 light:text-gray-600">' + escapeHtml(p.lastActive) + '</td>';
+    tbody.appendChild(tr);
+  }
+}
+
 // Sort handlers
 document.querySelectorAll('.sort-btn').forEach(btn => {
   btn.addEventListener('click', () => {
+    if (!btn.dataset.sort) return;
     const key = btn.dataset.sort;
     if (currentSort.key === key) {
       currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
@@ -1020,6 +1104,19 @@ document.querySelectorAll('.sort-btn').forEach(btn => {
       currentSort.dir = 'desc';
     }
     if (filteredData) renderTable(filteredData);
+  });
+});
+
+document.querySelectorAll('[data-proj-sort]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.projSort;
+    if (currentProjSort.key === key) {
+      currentProjSort.dir = currentProjSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      currentProjSort.key = key;
+      currentProjSort.dir = key === 'project' ? 'asc' : 'desc';
+    }
+    renderProjects(window.__latestData || DATA);
   });
 });
 
