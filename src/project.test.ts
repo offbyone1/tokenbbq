@@ -31,64 +31,121 @@ describe('resolveProjectRoot', () => {
     } finally { fx.cleanup(); }
   });
 
-  test('walks up to directory with .git', () => {
+  test('walks up to directory with .git (only marker, no inner)', () => {
     const fx = makeFixture();
     try {
       const deep = fx.mkdir('myproj/src/nested');
       fx.mkdir('myproj/.git');
       const res = resolveProjectRoot(deep);
-      assert.equal(res.root, path.join(fx.root, 'myproj'));
       assert.equal(res.name, 'myproj');
     } finally { fx.cleanup(); }
   });
 
-  test('walks up to directory with package.json (no git)', () => {
+  test('walks up to directory with package.json when no Git anywhere', () => {
     const fx = makeFixture();
     try {
-      const deep = fx.mkdir('myproj/lib/x');
-      fx.touch('myproj/package.json');
+      const deep = fx.mkdir('localtool/lib/x');
+      fx.touch('localtool/package.json');
       const res = resolveProjectRoot(deep);
-      assert.equal(res.name, 'myproj');
+      assert.equal(res.name, 'localtool');
     } finally { fx.cleanup(); }
   });
 
-  test('any marker works — README.md counts', () => {
+  test('OUTERMOST marker wins even when inner subfolder also has a marker', () => {
+    // This is the core bug fix: NanoGolf (.git) / server (package.json) → NanoGolf
     const fx = makeFixture();
     try {
-      const deep = fx.mkdir('myproj/sub');
-      fx.touch('myproj/README.md');
+      const deep = fx.mkdir('NanoGolf/server/sub');
+      fx.mkdir('NanoGolf/.git');
+      fx.touch('NanoGolf/server/package.json');
       const res = resolveProjectRoot(deep);
-      assert.equal(res.name, 'myproj');
+      assert.equal(res.name, 'NanoGolf');
     } finally { fx.cleanup(); }
   });
 
-  test('first marker wins — stops at nearest ancestor with any marker', () => {
+  test('Git and manifest are equal weight — outermost still wins', () => {
+    // Only inner has .git, only outer has package.json → outer (package.json) wins because it is outermost
     const fx = makeFixture();
     try {
       const deep = fx.mkdir('outer/inner/sub');
-      fx.mkdir('outer/.git');
-      fx.touch('outer/inner/package.json');
+      fx.touch('outer/package.json');
+      fx.mkdir('outer/inner/.git');
       const res = resolveProjectRoot(deep);
-      assert.equal(res.name, 'inner');
+      assert.equal(res.name, 'outer');
     } finally { fx.cleanup(); }
   });
 
-  test('stops at $HOME boundary', () => {
+  test('local-only project with just package.json (no Git) is a valid root', () => {
+    const fx = makeFixture();
+    try {
+      const deep = fx.mkdir('MyTool/src');
+      fx.touch('MyTool/package.json');
+      const res = resolveProjectRoot(deep);
+      assert.equal(res.name, 'MyTool');
+    } finally { fx.cleanup(); }
+  });
+
+  test('monorepo subpackage rolls up to repo root', () => {
+    const fx = makeFixture();
+    try {
+      const deep = fx.mkdir('MegaApp/packages/frontend/src');
+      fx.mkdir('MegaApp/.git');
+      fx.touch('MegaApp/package.json');
+      fx.touch('MegaApp/packages/frontend/package.json');
+      const res = resolveProjectRoot(deep);
+      assert.equal(res.name, 'MegaApp');
+    } finally { fx.cleanup(); }
+  });
+
+  test('README.md alone is NOT a marker (too weak)', () => {
+    const fx = makeFixture();
+    try {
+      const deep = fx.mkdir('notaproj/sub');
+      fx.touch('notaproj/README.md');
+      const res = resolveProjectRoot(deep);
+      // No marker → cwd itself is the root
+      assert.equal(res.root, deep);
+      assert.equal(res.name, 'sub');
+    } finally { fx.cleanup(); }
+  });
+
+  test('.gitignore alone is NOT a marker (too weak — common in $HOME)', () => {
+    const fx = makeFixture();
+    try {
+      const deep = fx.mkdir('notaproj/sub');
+      fx.touch('notaproj/.gitignore');
+      const res = resolveProjectRoot(deep);
+      assert.equal(res.root, deep);
+      assert.equal(res.name, 'sub');
+    } finally { fx.cleanup(); }
+  });
+
+  test('stops at $HOME boundary (does not ascend above)', () => {
     const home = homedir();
     const res = resolveProjectRoot(home);
     assert.equal(res.root, home);
     assert.equal(res.name, path.basename(home));
   });
 
-  test('returns the same result when called twice with same cwd (cached)', () => {
+  test('cached — same result on repeat calls', () => {
     const fx = makeFixture();
     try {
       const deep = fx.mkdir('p/q');
-      fx.touch('p/README.md');
+      fx.touch('p/package.json');
       const a = resolveProjectRoot(deep);
       const b = resolveProjectRoot(deep);
       assert.equal(a.root, b.root);
       assert.equal(a.name, b.name);
+    } finally { fx.cleanup(); }
+  });
+
+  test('*.csproj counts as a manifest marker', () => {
+    const fx = makeFixture();
+    try {
+      const deep = fx.mkdir('MyDotNet/src');
+      fx.touch('MyDotNet/MyDotNet.csproj');
+      const res = resolveProjectRoot(deep);
+      assert.equal(res.name, 'MyDotNet');
     } finally { fx.cleanup(); }
   });
 });

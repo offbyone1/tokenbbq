@@ -1,26 +1,26 @@
-import { existsSync, statSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
-const MARKERS = [
-  '.git', '.hg', '.svn',
+const VCS_MARKERS = ['.git', '.hg', '.svn'];
+const MANIFEST_MARKERS = [
   'package.json', 'pyproject.toml', 'Cargo.toml', 'go.mod', 'pom.xml',
-  'README.md', '.gitignore', 'CHANGELOG.md',
 ];
-
 const CSPROJ_RE = /\.csproj$/i;
 
 function hasMarker(dir: string): boolean {
-  for (const m of MARKERS) {
+  for (const m of VCS_MARKERS) {
+    if (existsSync(path.join(dir, m))) return true;
+  }
+  for (const m of MANIFEST_MARKERS) {
     if (existsSync(path.join(dir, m))) return true;
   }
   try {
-    const entries = readdirSync(dir);
-    for (const e of entries) {
-      if (CSPROJ_RE.test(e)) return true;
+    for (const entry of readdirSync(dir)) {
+      if (CSPROJ_RE.test(entry)) return true;
     }
   } catch {
-    // ignore — directory unreadable, treat as "no marker"
+    // directory unreadable — treat as "no marker"
   }
   return false;
 }
@@ -36,29 +36,26 @@ export function resolveProjectRoot(cwd: string): { root: string; name: string } 
   const parsed = path.parse(normalized);
   const driveRoot = parsed.root;
 
+  // Walk from cwd up to (but not including) the boundary.
+  // Track the OUTERMOST directory that has any marker.
+  let outermostMarkerDir: string | null = null;
   let current = normalized;
-  let found = false;
   while (true) {
-    // Hard boundaries — never walk past home or drive root
     if (current === home || current === driveRoot) break;
-
     try {
       if (statSync(current).isDirectory() && hasMarker(current)) {
-        found = true;
-        break;
+        outermostMarkerDir = current; // overwrite so the last (=outermost) sticks
       }
     } catch {
       break;
     }
-
     const parent = path.dirname(current);
     if (parent === current) break;
     current = parent;
   }
 
-  const root = found ? current : normalized;
+  const root = outermostMarkerDir ?? normalized;
   const result = { root, name: path.basename(root) || root };
   cache.set(normalized, result);
   return result;
 }
-
