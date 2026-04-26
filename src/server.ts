@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import { serve } from '@hono/node-server';
 import { createServer } from 'node:net';
 import { readFile } from 'node:fs/promises';
@@ -23,6 +24,15 @@ async function findFreePort(preferred: number): Promise<number> {
 	return 0;
 }
 
+export interface ServerHandle {
+	/**
+	 * Force a fresh data reload and broadcast an SSE update to all
+	 * subscribed clients. Safe to call repeatedly; the underlying readData
+	 * coalesces overlapping calls.
+	 */
+	notifyDataChanged(): Promise<void>;
+}
+
 export async function startServer(
 	data: DashboardData,
 	options: {
@@ -31,11 +41,15 @@ export async function startServer(
 		getData?: () => Promise<DashboardData>;
 		brandLogoPath?: string | null;
 	},
-): Promise<void> {
+): Promise<ServerHandle> {
 	const app = new Hono();
 	let currentData = data;
 	let refreshInFlight: Promise<DashboardData> | null = null;
 	let lastRefreshAt = Date.now();
+
+	type Subscriber = (id: number) => Promise<void>;
+	const subscribers = new Set<Subscriber>();
+	let updateId = 0;
 
 	async function readData(force = false): Promise<DashboardData> {
 		if (!options.getData) return currentData;
@@ -59,6 +73,15 @@ export async function startServer(
 		return refreshInFlight;
 	}
 
+	function broadcast(): void {
+		const id = ++updateId;
+		// Snapshot subscribers — a slow client can't block fast ones, and
+		// failed sends evict the subscriber so we don't accumulate dead ones.
+		for (const send of [...subscribers]) {
+			send(id).catch(() => subscribers.delete(send));
+		}
+	}
+
 	app.get('/', async (c) => {
 		return c.html(
 			renderDashboard(await readData(), {
@@ -69,6 +92,36 @@ export async function startServer(
 
 	app.get('/api/data', async (c) => {
 		return c.json(await readData(true));
+	});
+
+	app.get('/api/stream', (c) => {
+		return streamSSE(c, async (stream) => {
+			let alive = true;
+			const send: Subscriber = async (id) => {
+				if (!alive) return;
+				await stream.writeSSE({ event: 'update', data: String(id), id: String(id) });
+			};
+			subscribers.add(send);
+			stream.onAbort(() => {
+				alive = false;
+				subscribers.delete(send);
+			});
+
+			// Initial hello so EventSource fires onopen reliably across browsers.
+			await stream.writeSSE({ event: 'hello', data: '' });
+
+			// Heartbeat — keeps proxies and idle TCP from killing the stream.
+			while (alive) {
+				await stream.sleep(30000);
+				if (!alive) break;
+				try {
+					await stream.writeSSE({ event: 'heartbeat', data: '' });
+				} catch {
+					alive = false;
+					subscribers.delete(send);
+				}
+			}
+		});
 	});
 
 	app.get('/brand-logo', async (c) => {
@@ -112,4 +165,11 @@ export async function startServer(
 		server.close();
 		process.exit(0);
 	});
+
+	return {
+		notifyDataChanged: async () => {
+			await readData(true);
+			broadcast();
+		},
+	};
 }

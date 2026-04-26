@@ -1,12 +1,23 @@
 import pc from 'picocolors';
 import type { Source, UnifiedTokenEvent } from '../types.js';
 import { SOURCE_LABELS } from '../types.js';
-import { loadClaudeEvents } from './claude.js';
-import { loadCodexEvents } from './codex.js';
-import { loadGeminiEvents } from './gemini.js';
-import { loadOpenCodeEvents } from './opencode.js';
-import { loadAmpEvents } from './amp.js';
-import { loadPiEvents } from './pi.js';
+import { loadClaudeEvents, getClaudeWatchPaths } from './claude.js';
+import { loadCodexEvents, getCodexWatchPaths } from './codex.js';
+import { loadGeminiEvents, getGeminiWatchPaths } from './gemini.js';
+import { loadOpenCodeEvents, getOpenCodeWatchPaths } from './opencode.js';
+import { loadAmpEvents, getAmpWatchPaths } from './amp.js';
+import { loadPiEvents, getPiWatchPaths } from './pi.js';
+
+export function getAllWatchPaths(): string[] {
+	return [
+		...getClaudeWatchPaths(),
+		...getCodexWatchPaths(),
+		...getGeminiWatchPaths(),
+		...getOpenCodeWatchPaths(),
+		...getAmpWatchPaths(),
+		...getPiWatchPaths(),
+	];
+}
 
 export interface LoaderOptions {
 	quiet: boolean;

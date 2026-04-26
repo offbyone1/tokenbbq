@@ -2,10 +2,11 @@ import pc from 'picocolors';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { loadAll } from './loaders/index.js';
+import { loadAll, getAllWatchPaths } from './loaders/index.js';
 import { enrichCosts } from './pricing.js';
 import { buildDashboardData } from './aggregator.js';
 import { startServer } from './server.js';
+import { startToolWatcher } from './watcher.js';
 import { printDailyTable, printMonthlyTable, printSummary } from './cli-output.js';
 import { loadStore, appendEvents, type StoreState } from './store.js';
 
@@ -123,12 +124,21 @@ async function main(): Promise<void> {
 		case 'dashboard':
 		default:
 			printSummary(data);
-			await startServer(data, {
+			const handle = await startServer(data, {
 				port,
 				open: !noOpen,
 				getData: reloadDashboardData,
 				brandLogoPath: getDashboardBrandLogoPath(),
 			});
+
+			const watcher = startToolWatcher(getAllWatchPaths(), () => {
+				handle.notifyDataChanged().catch(() => {});
+			});
+			if (watcher.watching > 0) {
+				log(pc.dim(`  Live-watching ${watcher.watching} tool director${watcher.watching === 1 ? 'y' : 'ies'} for changes.\n`));
+			}
+			process.on('SIGINT', () => watcher.close());
+			process.on('SIGTERM', () => watcher.close());
 			break;
 	}
 }

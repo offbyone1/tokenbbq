@@ -67,6 +67,11 @@ function extractModel(payload: Record<string, unknown>): string | undefined {
 	return undefined;
 }
 
+export function getCodexWatchPaths(): string[] {
+	const dir = getCodexDir();
+	return dir ? [path.join(dir, 'sessions')] : [];
+}
+
 export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 	const codexDir = getCodexDir();
 	if (!codexDir) return [];

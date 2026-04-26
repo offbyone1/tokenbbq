@@ -1810,6 +1810,31 @@ function buildHeatmapPopup(data) {
 setInterval(() => {
   if (!document.hidden) refreshDashboardData();
 }, LIVE_REFRESH_MS);
+
+(function subscribeToServerEvents() {
+  if (typeof EventSource === 'undefined') return;
+  let es = null;
+  let reconnectTimer = null;
+
+  function connect() {
+    es = new EventSource('/api/stream');
+    es.addEventListener('update', () => {
+      if (!document.hidden) refreshDashboardData();
+    });
+    es.onerror = () => {
+      // Browser will sometimes auto-reconnect; if not, fall back to a manual
+      // retry after a short delay. Polling stays running as a safety net.
+      if (es) { try { es.close(); } catch (_) {} es = null; }
+      if (!reconnectTimer) {
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          connect();
+        }, 5000);
+      }
+    };
+  }
+  connect();
+}());
 <\/script>
 </body>
 </html>`;

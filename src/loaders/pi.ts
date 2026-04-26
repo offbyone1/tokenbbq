@@ -18,6 +18,11 @@ function getPiAgentDir(): string | null {
 	return null;
 }
 
+export function getPiWatchPaths(): string[] {
+	const dir = getPiAgentDir();
+	return dir ? [dir] : [];
+}
+
 export async function loadPiEvents(): Promise<UnifiedTokenEvent[]> {
 	const piDir = getPiAgentDir();
 	if (!piDir) return [];

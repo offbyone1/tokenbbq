@@ -57,6 +57,10 @@ function parseLine(raw: Record<string, unknown>): UnifiedTokenEvent | null {
 	};
 }
 
+export function getClaudeWatchPaths(): string[] {
+	return getClaudePaths().map((p) => path.join(p, 'projects'));
+}
+
 export async function loadClaudeEvents(): Promise<UnifiedTokenEvent[]> {
 	const claudePaths = getClaudePaths();
 	if (claudePaths.length === 0) return [];

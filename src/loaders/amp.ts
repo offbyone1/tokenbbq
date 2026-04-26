@@ -18,6 +18,11 @@ function getAmpPath(): string | null {
 	return null;
 }
 
+export function getAmpWatchPaths(): string[] {
+	const ampPath = getAmpPath();
+	return ampPath ? [path.join(ampPath, 'threads')] : [];
+}
+
 export async function loadAmpEvents(): Promise<UnifiedTokenEvent[]> {
 	const ampPath = getAmpPath();
 	if (!ampPath) return [];

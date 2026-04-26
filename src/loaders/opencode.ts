@@ -26,6 +26,11 @@ function numberOr(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 }
 
+export function getOpenCodeWatchPaths(): string[] {
+  const dir = getOpenCodeDir();
+  return dir ? [dir] : [];
+}
+
 export async function loadOpenCodeEvents(opts: LoaderOptions = { quiet: false }): Promise<UnifiedTokenEvent[]> {
   const dir = getOpenCodeDir();
   if (!dir) return [];

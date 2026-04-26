@@ -35,6 +35,11 @@ function inferProjectName(tmpDir: string, file: string): string | undefined {
 	return candidate;
 }
 
+export function getGeminiWatchPaths(): string[] {
+	const dir = getGeminiDir();
+	return dir ? [path.join(dir, 'tmp')] : [];
+}
+
 export async function loadGeminiEvents(): Promise<UnifiedTokenEvent[]> {
 	const geminiDir = getGeminiDir();
 	if (!geminiDir) return [];
