@@ -103,8 +103,8 @@ async function main(): Promise<void> {
 
 	const reloadDashboardData = async () => {
 		const { events: fresh } = await loadAll(true);
-		appendEvents(store, fresh);
-		await enrichCosts(store.events);
+		const addedNow = appendEvents(store, fresh);
+		if (addedNow.length > 0) await enrichCosts(addedNow);
 		return buildDashboardData(store.events);
 	};
 

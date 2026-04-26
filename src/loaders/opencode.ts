@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import initSqlJs from 'sql.js';
 import type { UnifiedTokenEvent } from '../types.js';
+import type { LoaderOptions } from './index.js';
 import { resolveProjectRoot } from '../project.js';
 
 const HOME = homedir();
@@ -25,16 +26,17 @@ function numberOr(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 }
 
-export async function loadOpenCodeEvents(): Promise<UnifiedTokenEvent[]> {
+export async function loadOpenCodeEvents(opts: LoaderOptions = { quiet: false }): Promise<UnifiedTokenEvent[]> {
   const dir = getOpenCodeDir();
   if (!dir) return [];
   const dbFile = path.join(dir, 'opencode.db');
+  const warn = opts.quiet ? () => {} : console.warn.bind(console);
 
   let SQL: Awaited<ReturnType<typeof initSqlJs>>;
   try {
     SQL = await initSqlJs();
   } catch (err) {
-    console.warn('tokenbbq: failed to initialize sql.js for OpenCode loader:', err);
+    warn('tokenbbq: failed to initialize sql.js for OpenCode loader:', err);
     return [];
   }
 
@@ -43,7 +45,7 @@ export async function loadOpenCodeEvents(): Promise<UnifiedTokenEvent[]> {
     const buffer = readFileSync(dbFile);
     db = new SQL.Database(new Uint8Array(buffer));
   } catch (err) {
-    console.warn('tokenbbq: failed to open OpenCode DB:', err);
+    warn('tokenbbq: failed to open OpenCode DB:', err);
     return [];
   }
 

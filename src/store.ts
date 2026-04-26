@@ -31,6 +31,8 @@ export function hashEvent(e: UnifiedTokenEvent): string {
     e.tokens.input,
     e.tokens.output,
     e.tokens.cacheRead,
+    e.tokens.cacheCreation ?? 0,
+    e.tokens.reasoning ?? 0,
   ].join('|');
   return createHash('sha256').update(payload).digest('hex');
 }
@@ -79,9 +81,6 @@ export function loadStore(): StoreState {
       continue;
     }
 
-    const hash = typeof parsed.eventHash === 'string' ? parsed.eventHash : null;
-    if (!hash || hashes.has(hash)) continue;
-
     if (
       typeof parsed.source !== 'string' ||
       typeof parsed.timestamp !== 'string' ||
@@ -93,8 +92,7 @@ export function loadStore(): StoreState {
       continue;
     }
 
-    hashes.add(hash);
-    events.push({
+    const event: UnifiedTokenEvent = {
       source: parsed.source as UnifiedTokenEvent['source'],
       timestamp: parsed.timestamp as string,
       sessionId: parsed.sessionId as string,
@@ -102,7 +100,15 @@ export function loadStore(): StoreState {
       tokens: parsed.tokens as UnifiedTokenEvent['tokens'],
       costUSD: typeof parsed.costUSD === 'number' ? parsed.costUSD : 0,
       project: typeof parsed.project === 'string' ? parsed.project : undefined,
-    });
+    };
+
+    // Recompute hash from canonical fields rather than trusting the on-disk
+    // eventHash. Keeps dedup correct across hash-function changes — re-scanning
+    // the same upstream event always lands on the same in-memory hash.
+    const hash = hashEvent(event);
+    if (hashes.has(hash)) continue;
+    hashes.add(hash);
+    events.push(event);
   }
 
   if (badSeen > 0) console.warn(`tokenbbq: skipped ${badSeen} malformed line(s) in store`);
