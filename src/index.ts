@@ -14,7 +14,9 @@ function parseArgs(argv: string[]) {
 	const args = argv.slice(2);
 	const command = args.find((a) => !a.startsWith('-')) ?? 'dashboard';
 	const port = Number(args.find((a) => a.startsWith('--port='))?.split('=')[1] ?? 3000);
-	const json = args.includes('--json');
+	// `scan` is a headless one-shot: emit DashboardData JSON to stdout and exit.
+	// It implies --json so embedders (e.g. BurnRate sidecar) only need the verb.
+	const json = args.includes('--json') || command === 'scan';
 	const noOpen = args.includes('--no-open');
 	const help = args.includes('--help') || args.includes('-h');
 	return { command, port, json, noOpen, help };
@@ -29,6 +31,8 @@ ${pc.cyan('Usage:')}
   npx tokenbbq daily          Show daily usage table in terminal
   npx tokenbbq monthly        Show monthly usage table in terminal
   npx tokenbbq summary        Show compact summary
+  npx tokenbbq scan           Print DashboardData JSON to stdout and exit
+                              (headless one-shot; for embedding in other tools)
 
 ${pc.cyan('Options:')}
   --port=<n>     Server port (default: 3000)
@@ -69,6 +73,13 @@ function getDashboardBrandLogoPath(): string | null {
 async function main(): Promise<void> {
 	const { command, port, json, noOpen, help } = parseArgs(process.argv);
 
+	// Don't crash if a downstream consumer (e.g. `tokenbbq scan | head`) closes
+	// the pipe before we finish writing — relevant for the headless scan path
+	// where the JSON payload can be large.
+	process.stdout.on('error', (err) => {
+		if ((err as NodeJS.ErrnoException).code === 'EPIPE') process.exit(0);
+	});
+
 	if (help) {
 		printHelp();
 		return;
@@ -85,6 +96,12 @@ async function main(): Promise<void> {
 	const added = appendEvents(store, scanned);
 
 	if (store.events.length === 0) {
+		// In JSON mode (incl. `scan`) emit a valid empty DashboardData rather than
+		// returning silently — embedders can then unconditionally JSON.parse stdout.
+		if (json) {
+			process.stdout.write(JSON.stringify(buildDashboardData([]), null, 2));
+			return;
+		}
 		console.error(pc.yellow('\n  No usage data found.'));
 		console.error(pc.dim('  Make sure you have used at least one supported AI coding tool.'));
 		console.error(pc.dim('  Run `npx tokenbbq --help` for supported tool paths.\n'));
