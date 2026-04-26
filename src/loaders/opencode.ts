@@ -1,136 +1,136 @@
-import { readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { glob } from 'tinyglobby';
+import initSqlJs from 'sql.js';
 import type { UnifiedTokenEvent } from '../types.js';
+import type { LoaderOptions } from './index.js';
+import { resolveProjectRoot } from '../project.js';
 
 const HOME = homedir();
 
-function getOpenCodePath(): string | null {
-	const envPath = (process.env.OPENCODE_DATA_DIR ?? '').trim();
-	if (envPath !== '') {
-		const resolved = path.resolve(envPath);
-		if (existsSync(resolved)) return resolved;
-	}
-	const defaultPath = path.join(HOME, '.local', 'share', 'opencode');
-	if (existsSync(defaultPath)) return defaultPath;
-	return null;
+function getOpenCodeDir(): string | null {
+  const envPath = (process.env.OPENCODE_DATA_DIR ?? '').trim();
+  if (envPath !== '') {
+    const resolved = path.resolve(envPath);
+    if (existsSync(path.join(resolved, 'opencode.db'))) return resolved;
+  }
+  const defaultPath = path.join(HOME, '.local', 'share', 'opencode');
+  if (existsSync(path.join(defaultPath, 'opencode.db'))) return defaultPath;
+  return null;
 }
 
-function parseOpenCodeEvent(
-	msg: Record<string, unknown>,
-	fallbackSessionId?: string,
-	fallbackCreatedMs?: number,
-): UnifiedTokenEvent | null {
-	const sessionId = String(msg.sessionID ?? fallbackSessionId ?? '');
-	if (!sessionId) return null;
+interface ProjectRow { id: string; worktree: string }
+interface SessionRow { id: string; project_id: string; directory: string }
 
-	const providerID = msg.providerID as string | undefined;
-	const modelID = msg.modelID as string | undefined;
-	if (!providerID || !modelID) return null;
-
-	const tokens = msg.tokens as Record<string, unknown> | undefined;
-	if (!tokens) return null;
-
-	const input = Number(tokens.input ?? 0);
-	const output = Number(tokens.output ?? 0);
-	const cache = tokens.cache as Record<string, unknown> | undefined;
-	const cacheCreation = Number(cache?.write ?? 0);
-	const cacheRead = Number(cache?.read ?? 0);
-	const reasoning = Number(tokens.reasoning ?? 0);
-	if (input === 0 && output === 0 && cacheCreation === 0 && cacheRead === 0 && reasoning === 0) return null;
-
-	const time = msg.time as Record<string, unknown> | undefined;
-	const createdMs = Number(time?.created ?? fallbackCreatedMs ?? Date.now());
-
-	return {
-		source: 'opencode',
-		timestamp: new Date(createdMs).toISOString(),
-		sessionId,
-		model: modelID,
-		tokens: {
-			input,
-			output,
-			cacheCreation,
-			cacheRead,
-			reasoning,
-		},
-		costUSD: typeof msg.cost === 'number' ? msg.cost : 0,
-	};
+function numberOr(v: unknown, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 }
 
-async function loadOpenCodeEventsFromDb(dbPath: string): Promise<UnifiedTokenEvent[] | null> {
-	if (!existsSync(dbPath)) return null;
+export async function loadOpenCodeEvents(opts: LoaderOptions = { quiet: false }): Promise<UnifiedTokenEvent[]> {
+  const dir = getOpenCodeDir();
+  if (!dir) return [];
+  const dbFile = path.join(dir, 'opencode.db');
+  const warn = opts.quiet ? () => {} : console.warn.bind(console);
 
-	try {
-		const { DatabaseSync } = await import('node:sqlite');
-		const db = new DatabaseSync(dbPath, { readOnly: true });
-		try {
-			const rows = db
-				.prepare('SELECT session_id, time_created, data FROM message ORDER BY time_created ASC')
-				.all() as Array<{ session_id: string; time_created: number; data: string }>;
-			const events: UnifiedTokenEvent[] = [];
+  let SQL: Awaited<ReturnType<typeof initSqlJs>>;
+  try {
+    SQL = await initSqlJs();
+  } catch (err) {
+    warn('tokenbbq: failed to initialize sql.js for OpenCode loader:', err);
+    return [];
+  }
 
-			for (const row of rows) {
-				let msg: Record<string, unknown>;
-				try {
-					msg = JSON.parse(String(row.data ?? '{}'));
-				} catch {
-					continue;
-				}
+  let db: InstanceType<typeof SQL.Database>;
+  try {
+    const buffer = readFileSync(dbFile);
+    db = new SQL.Database(new Uint8Array(buffer));
+  } catch (err) {
+    warn('tokenbbq: failed to open OpenCode DB:', err);
+    return [];
+  }
 
-				const event = parseOpenCodeEvent(msg, row.session_id, row.time_created);
-				if (event) events.push(event);
-			}
+  const events: UnifiedTokenEvent[] = [];
 
-			return events;
-		} finally {
-			db.close();
-		}
-	} catch {
-		return null;
-	}
-}
+  try {
+    // project_id -> worktree lookup
+    const projects = new Map<string, string>();
+    const projStmt = db.prepare('SELECT id, worktree FROM project');
+    try {
+      while (projStmt.step()) {
+        const row = projStmt.getAsObject() as unknown as ProjectRow;
+        projects.set(row.id, row.worktree ?? '');
+      }
+    } finally {
+      projStmt.free();
+    }
 
-export async function loadOpenCodeEvents(): Promise<UnifiedTokenEvent[]> {
-	const basePath = getOpenCodePath();
-	if (!basePath) return [];
+    // session_id -> cwd (fallback to project.worktree if session.directory is empty)
+    const sessions = new Map<string, string>();
+    const sessStmt = db.prepare('SELECT id, project_id, directory FROM session');
+    try {
+      while (sessStmt.step()) {
+        const row = sessStmt.getAsObject() as unknown as SessionRow;
+        const cwd = row.directory && row.directory.trim()
+          ? row.directory
+          : projects.get(row.project_id) ?? '';
+        sessions.set(row.id, cwd);
+      }
+    } finally {
+      sessStmt.free();
+    }
 
-	const dbPath = path.join(basePath, 'opencode.db');
-	const dbEvents = await loadOpenCodeEventsFromDb(dbPath);
-	if (dbEvents) return dbEvents;
+    // Iterate assistant messages with usage info
+    const msgStmt = db.prepare('SELECT id, session_id, time_created, data FROM message');
+    try {
+      while (msgStmt.step()) {
+        const row = msgStmt.getAsObject() as unknown as { id: string; session_id: string; time_created: number; data: string };
+        let payload: Record<string, unknown>;
+        try {
+          payload = JSON.parse(row.data);
+        } catch {
+          continue;
+        }
 
-	const messagesDir = path.join(basePath, 'storage', 'message');
-	if (!existsSync(messagesDir)) return [];
+        if (payload.role !== 'assistant') continue;
 
-	const files = await glob('**/*.json', { cwd: messagesDir, absolute: true });
-	const events: UnifiedTokenEvent[] = [];
-	const seen = new Set<string>();
+        const tokens = payload.tokens as Record<string, unknown> | undefined;
+        if (!tokens) continue;
 
-	for (const file of files) {
-		let content: string;
-		try {
-			content = await readFile(file, 'utf-8');
-		} catch {
-			continue;
-		}
+        const input = numberOr(tokens.input, 0);
+        const output = numberOr(tokens.output, 0);
+        const reasoning = numberOr(tokens.reasoning, 0);
+        const cache = (tokens.cache ?? {}) as Record<string, unknown>;
+        const cacheRead = numberOr(cache.read, 0);
+        const cacheCreation = numberOr(cache.write, 0);
 
-		let msg: Record<string, unknown>;
-		try {
-			msg = JSON.parse(content);
-		} catch {
-			continue;
-		}
+        if (input === 0 && output === 0 && cacheRead === 0 && cacheCreation === 0 && reasoning === 0) continue;
 
-		const id = String(msg.id ?? '');
-		if (!id || seen.has(id)) continue;
-		seen.add(id);
+        const time = payload.time as Record<string, unknown> | undefined;
+        const timestampMs = numberOr(time?.created, row.time_created);
+        const timestamp = new Date(timestampMs).toISOString();
 
-		const event = parseOpenCodeEvent(msg);
-		if (event) events.push(event);
-	}
+        const modelID = typeof payload.modelID === 'string' ? payload.modelID : 'unknown';
 
-	events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-	return events;
+        const cwd = sessions.get(row.session_id) ?? '';
+        const project = cwd ? resolveProjectRoot(cwd).name : undefined;
+
+        events.push({
+          source: 'opencode',
+          timestamp,
+          sessionId: row.session_id,
+          model: modelID,
+          tokens: { input, output, cacheCreation, cacheRead, reasoning },
+          costUSD: 0,
+          project,
+        });
+      }
+    } finally {
+      msgStmt.free();
+    }
+  } finally {
+    db.close();
+  }
+
+  events.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  return events;
 }

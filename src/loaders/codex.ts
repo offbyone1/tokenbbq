@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { glob } from 'tinyglobby';
 import type { UnifiedTokenEvent } from '../types.js';
+import { resolveProjectRoot } from '../project.js';
 
 const HOME = homedir();
 const FALLBACK_MODEL = 'gpt-5';
@@ -85,6 +86,7 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 
 		let prevTotals: RawUsage | null = null;
 		let currentModel: string | undefined;
+		let sessionProject: string | undefined;
 
 		for (const line of content.split(/\r?\n/)) {
 			const trimmed = line.trim();
@@ -100,6 +102,12 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 			const entryType = entry.type as string | undefined;
 			const payload = (entry.payload ?? {}) as Record<string, unknown>;
 			const timestamp = entry.timestamp as string | undefined;
+
+			if (entryType === 'session_meta') {
+				const cwd = typeof payload.cwd === 'string' ? payload.cwd : undefined;
+				if (cwd) sessionProject = resolveProjectRoot(cwd).name;
+				continue;
+			}
 
 			if (entryType === 'turn_context') {
 				const m = extractModel(payload);
@@ -145,6 +153,7 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 					reasoning: raw.reasoning,
 				},
 				costUSD: 0,
+				project: sessionProject,
 			});
 		}
 	}

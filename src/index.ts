@@ -7,6 +7,7 @@ import { enrichCosts } from './pricing.js';
 import { buildDashboardData } from './aggregator.js';
 import { startServer } from './server.js';
 import { printDailyTable, printMonthlyTable, printSummary } from './cli-output.js';
+import { loadStore, appendEvents, type StoreState } from './store.js';
 
 function parseArgs(argv: string[]) {
 	const args = argv.slice(2);
@@ -64,15 +65,6 @@ function getDashboardBrandLogoPath(): string | null {
 	return null;
 }
 
-async function reloadDashboardData(): Promise<ReturnType<typeof buildDashboardData>> {
-	const { events } = await loadAll(true);
-	if (events.length === 0) {
-		throw new Error('No usage data found');
-	}
-	await enrichCosts(events);
-	return buildDashboardData(events);
-}
-
 async function main(): Promise<void> {
 	const { command, port, json, noOpen, help } = parseArgs(process.argv);
 
@@ -87,25 +79,34 @@ async function main(): Promise<void> {
 	log(pc.bold('  🔥 TokenBBQ'));
 	log(pc.dim('  Scanning for AI tool usage data...\n'));
 
-	const { events, detected, errors } = await loadAll(json);
+	const store: StoreState = loadStore();
+	const { events: scanned, detected } = await loadAll(json);
+	const added = appendEvents(store, scanned);
 
-	if (events.length === 0) {
+	if (store.events.length === 0) {
 		console.error(pc.yellow('\n  No usage data found.'));
 		console.error(pc.dim('  Make sure you have used at least one supported AI coding tool.'));
 		console.error(pc.dim('  Run `npx tokenbbq --help` for supported tool paths.\n'));
 		return;
 	}
 
-	log(pc.dim(`\n  Total: ${events.length.toLocaleString()} events from ${detected.length} source(s)\n`));
+	log(pc.dim(`\n  Total: ${store.events.length.toLocaleString()} events in store (+ ${added.length} new from ${detected.length} source(s))\n`));
 	log(pc.dim('  Calculating costs...'));
-	await enrichCosts(events);
+	await enrichCosts(store.events);
 
-	const data = buildDashboardData(events);
+	const data = buildDashboardData(store.events);
 
 	if (json) {
 		process.stdout.write(JSON.stringify(data, null, 2));
 		return;
 	}
+
+	const reloadDashboardData = async () => {
+		const { events: fresh } = await loadAll(true);
+		const addedNow = appendEvents(store, fresh);
+		if (addedNow.length > 0) await enrichCosts(addedNow);
+		return buildDashboardData(store.events);
+	};
 
 	switch (command) {
 		case 'daily':

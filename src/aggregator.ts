@@ -9,6 +9,7 @@ import type {
 	ModelAggregation,
 	SourceModelAggregation,
 	ProjectAggregation,
+	ProjectSourceBreakdown,
 	HeatmapCell,
 	DashboardData,
 	Source,
@@ -45,12 +46,6 @@ function sortSources(sources: Source[]): Source[] {
 	return [...sources].sort((a, b) => sourceRank(a) - sourceRank(b) || a.localeCompare(b));
 }
 
-function normalizedProjectName(project?: string): string | null {
-	if (typeof project !== 'string') return null;
-	const trimmed = project.trim();
-	if (!trimmed || trimmed.toLowerCase() === 'unknown') return null;
-	return trimmed;
-}
 
 export function aggregateDaily(events: UnifiedTokenEvent[]): DailyAggregation[] {
 	const map = new Map<string, DailyAggregation>();
@@ -246,17 +241,22 @@ export function aggregateByProject(events: UnifiedTokenEvent[]): ProjectAggregat
 	const map = new Map<string, ProjectAggregation>();
 
 	for (const e of events) {
-		const project = normalizedProjectName(e.project);
-		if (!project) continue;
+		const project = typeof e.project === 'string' ? e.project.trim() : '';
+		if (!project || project.toLowerCase() === 'unknown') continue;
 
 		let agg = map.get(project);
 		if (!agg) {
 			agg = {
 				project,
+				// v1: projectPath mirrors project until UnifiedTokenEvent carries the resolved path.
+				// Same-named projects at different filesystem roots will currently merge.
+				projectPath: project,
 				tokens: emptyTokens(),
 				costUSD: 0,
 				sources: [],
 				eventCount: 0,
+				lastActive: dateKey(e.timestamp),
+				perSource: [],
 			};
 			map.set(project, agg);
 		}
@@ -264,13 +264,29 @@ export function aggregateByProject(events: UnifiedTokenEvent[]): ProjectAggregat
 		agg.costUSD += e.costUSD;
 		agg.sources.push(e.source);
 		agg.eventCount++;
+		const date = dateKey(e.timestamp);
+		if (date > agg.lastActive) agg.lastActive = date;
+
+		let srcEntry = agg.perSource.find(s => s.source === e.source);
+		if (!srcEntry) {
+			srcEntry = { source: e.source, tokens: emptyTokens(), costUSD: 0, eventCount: 0 };
+			agg.perSource.push(srcEntry);
+		}
+		srcEntry.tokens = addTokens(srcEntry.tokens, e.tokens);
+		srcEntry.costUSD += e.costUSD;
+		srcEntry.eventCount += 1;
 	}
 
 	for (const agg of map.values()) {
 		agg.sources = sortSources(unique(agg.sources) as Source[]);
+		agg.perSource.sort((a, b) => totalTokenCount(b.tokens) - totalTokenCount(a.tokens));
 	}
 
-	return [...map.values()].sort((a, b) => b.costUSD - a.costUSD);
+	return [...map.values()].sort((a, b) => {
+		const tokenDiff = totalTokenCount(b.tokens) - totalTokenCount(a.tokens);
+		if (tokenDiff !== 0) return tokenDiff;
+		return a.project.localeCompare(b.project);
+	});
 }
 
 export function aggregateByModel(events: UnifiedTokenEvent[]): ModelAggregation[] {

@@ -8,9 +8,13 @@ import { loadOpenCodeEvents } from './opencode.js';
 import { loadAmpEvents } from './amp.js';
 import { loadPiEvents } from './pi.js';
 
+export interface LoaderOptions {
+	quiet: boolean;
+}
+
 type LoaderEntry = {
 	source: Source;
-	load: () => Promise<UnifiedTokenEvent[]>;
+	load: (opts: LoaderOptions) => Promise<UnifiedTokenEvent[]>;
 };
 
 const LOADERS: LoaderEntry[] = [
@@ -36,7 +40,7 @@ export async function loadAll(quiet = false): Promise<LoadAllResult> {
 
 	const results = await Promise.allSettled(
 		LOADERS.map(async (loader) => {
-			const loaderEvents = await loader.load();
+			const loaderEvents = await loader.load({ quiet });
 			return { source: loader.source, events: loaderEvents };
 		}),
 	);
