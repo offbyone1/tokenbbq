@@ -81,8 +81,15 @@ async function main(): Promise<void> {
 	log(pc.dim('  Scanning for AI tool usage data...\n'));
 
 	const store: StoreState = loadStore();
-	const { events: scanned, detected } = await loadAll(json);
+	const { events: scanned, detected, errors } = await loadAll(json);
 	const added = appendEvents(store, scanned);
+
+	// Surface loader failures rather than silently dropping them. In JSON
+	// mode (incl. `scan`) we route to stderr so structured stdout stays
+	// machine-parseable.
+	for (const e of errors) {
+		console.error(pc.yellow(`  warn: loader '${e.source}' failed: ${e.error}`));
+	}
 
 	if (store.events.length === 0) {
 		// In JSON mode (incl. `scan`) emit a valid empty DashboardData rather than

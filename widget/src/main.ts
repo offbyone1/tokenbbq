@@ -176,7 +176,7 @@ async function saveSettings(): Promise<void> {
 
   try {
     await invoke("save_settings", {
-      settings: { session_key: sessionKey, org_id: orgId, saved_at: null },
+      settings: { session_key: sessionKey, org_id: orgId },
     });
     closeSettings();
     startPolling();

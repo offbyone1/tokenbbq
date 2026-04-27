@@ -23,14 +23,6 @@ fn is_valid_session_key(s: &str) -> bool {
         && !s.contains('\n')
 }
 
-fn mask_key(key: &str) -> String {
-    if key.len() <= 12 {
-        return "\u{2022}".repeat(8);
-    }
-    let prefix = &key[..12];
-    format!("{}{}", prefix, "\u{2022}".repeat(8))
-}
-
 const KEYRING_SERVICE: &str = "com.offbyone1.tokenbbq";
 const KEYRING_USER: &str = "session_key";
 
@@ -52,15 +44,6 @@ fn keyring_set(key: &str) -> Result<(), String> {
         .map_err(|e| format!("Failed to save to credential store: {}", e))
 }
 
-fn keyring_delete() -> Result<(), String> {
-    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
-        .map_err(|e| format!("Keyring error: {}", e))?;
-    match entry.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(format!("Failed to delete from credential store: {}", e)),
-    }
-}
-
 async fn keyring_get_async() -> Result<Option<String>, String> {
     tokio::task::spawn_blocking(keyring_get)
         .await
@@ -69,12 +52,6 @@ async fn keyring_get_async() -> Result<Option<String>, String> {
 
 async fn keyring_set_async(key: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || keyring_set(&key))
-        .await
-        .map_err(|e| format!("Task error: {}", e))?
-}
-
-async fn keyring_delete_async() -> Result<(), String> {
-    tokio::task::spawn_blocking(keyring_delete)
         .await
         .map_err(|e| format!("Task error: {}", e))?
 }
@@ -204,7 +181,7 @@ pub async fn auto_detect_org(client: State<'_, reqwest::Client>, session_key: St
 
 /// Resolve how to invoke TokenBBQ's `scan` subcommand. Returns the program +
 /// argument list ready for std::process::Command. Resolution order:
-///   1. TOKENBBQ_SIDECAR_PATH env var (or legacy BURNRATE_TOKENBBQ_PATH).
+///   1. TOKENBBQ_SIDECAR_PATH env var.
 ///   2. Bundled sidecar next to the widget binary — Tauri's `externalBin`
 ///      mechanism copies `binaries/tokenbbq-<triple>{.exe}` to the install
 ///      dir as `tokenbbq{.exe}`, so we look there first. This is the
@@ -213,9 +190,7 @@ pub async fn auto_detect_org(client: State<'_, reqwest::Client>, session_key: St
 ///      manifest dir at compile time. Used when running the widget without
 ///      a freshly built sidecar (e.g. iterating on UI only).
 fn resolve_tokenbbq_invocation() -> Result<(PathBuf, Vec<String>), String> {
-    let env_var = std::env::var("TOKENBBQ_SIDECAR_PATH")
-        .or_else(|_| std::env::var("BURNRATE_TOKENBBQ_PATH"));
-    if let Ok(env_path) = env_var {
+    if let Ok(env_path) = std::env::var("TOKENBBQ_SIDECAR_PATH") {
         let p = PathBuf::from(&env_path);
         if !p.exists() {
             return Err(format!("TOKENBBQ_SIDECAR_PATH does not point to an existing file: {}", env_path));
@@ -265,9 +240,9 @@ fn invocation_for(path: PathBuf) -> (PathBuf, Vec<String>) {
 /// Re-clicking just spawns another instance; TokenBBQ's `findFreePort`
 /// resolves port collisions transparently.
 ///
-/// We forward TOKENBBQ_LOGO_PATH so the dashboard renders the same coin/flame
-/// PNG the widget uses — keeps branding consistent without forcing the user
-/// to drop the file in `~/Downloads/tokenbbq.png` (TokenBBQ's other auto-path).
+/// If TOKENBBQ_LOGO_PATH is set in the widget process environment, we
+/// forward it so the dashboard renders that PNG. Without it the dashboard
+/// renders its built-in inline SVG mark — both are TokenBBQ branding.
 #[tauri::command]
 pub async fn open_full_dashboard() -> Result<(), String> {
     let (program, args_orig) = resolve_tokenbbq_invocation()?;
@@ -276,16 +251,7 @@ pub async fn open_full_dashboard() -> Result<(), String> {
         .map(|a| if a == "scan" { "dashboard".to_string() } else { a })
         .collect();
 
-    let logo_path = std::env::var("TOKENBBQ_LOGO_PATH").unwrap_or_else(|_| {
-        // Same asset the widget pill uses, resolved relative to the crate.
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("src")
-            .join("assets")
-            .join("tokenbbq-icon.png")
-            .to_string_lossy()
-            .into_owned()
-    });
+    let logo_path = std::env::var("TOKENBBQ_LOGO_PATH").ok();
 
     tokio::task::spawn_blocking(move || {
         let mut cmd = std::process::Command::new(&program);
@@ -293,8 +259,10 @@ pub async fn open_full_dashboard() -> Result<(), String> {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        if std::path::Path::new(&logo_path).exists() {
-            cmd.env("TOKENBBQ_LOGO_PATH", &logo_path);
+        if let Some(p) = logo_path.as_deref() {
+            if std::path::Path::new(p).exists() {
+                cmd.env("TOKENBBQ_LOGO_PATH", p);
+            }
         }
         cmd.spawn()
     })

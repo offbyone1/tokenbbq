@@ -21,14 +21,16 @@ pub struct ExtraUsage {
     pub utilization: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Settings POSTed from the frontend. `saved_at` is set server-side on
+/// every successful save, so we deliberately don't accept it as input.
+#[derive(Debug, Clone, Deserialize)]
 pub struct Settings {
     pub session_key: Option<String>,
     pub org_id: Option<String>,
-    pub saved_at: Option<u64>,
 }
 
-/// Settings returned to the frontend. Session key is stored securely in the OS credential store.
+/// Settings returned to the frontend. Session key comes from the OS
+/// credential store, never the JSON store.
 #[derive(Debug, Clone, Serialize)]
 pub struct SettingsDisplay {
     pub has_session_key: bool,
@@ -39,17 +41,20 @@ pub struct SettingsDisplay {
 
 /// Tight projection of TokenBBQ's DashboardData — just what the widget needs.
 /// Built by `fetch_local_usage` from the JSON output of `tokenbbq scan`.
+/// Token totals exclude `cacheRead` and `cacheCreation` — see
+/// `sum_token_counts` in commands.rs for the rationale.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalUsageSummary {
     pub generated: String,
     /// YYYY-MM-DD of the most recent active day. None if the store is empty.
     pub today_date: Option<String>,
-    /// Total tokens (input + output + cache + reasoning) on the most recent active day.
+    /// Conversational tokens (input + output + reasoning) on `today_date`.
     pub today_tokens: u64,
-    /// Total tokens across the last up-to-7 active days (inclusive of today).
+    /// Same metric summed across the most recent 7 active days.
     pub week_tokens: u64,
-    /// Per-source breakdown for `today_date`, sorted by tokens desc upstream-agnostic.
+    /// Per-source breakdown for `today_date`. Order is whatever `tokenbbq scan`
+    /// emits; the UI re-sorts client-side.
     pub today_by_source: Vec<SourceSpend>,
 }
 

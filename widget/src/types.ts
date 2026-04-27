@@ -16,10 +16,10 @@ export interface ClaudeUsageResponse {
   extra_usage: ExtraUsage | null;
 }
 
+/** Settings input shape for save_settings. saved_at is set server-side. */
 export interface Settings {
   session_key: string | null;
   org_id: string | null;
-  saved_at: number | null;
 }
 
 export interface SettingsDisplay {
@@ -38,7 +38,8 @@ export interface SourceSpend {
 }
 
 /// Mirrors `api_types::LocalUsageSummary`. todayDate is null when the store
-/// is empty; we hide the local zone instead of rendering zeroes.
+/// is empty. The widget hides the local zone when the entire summary fails
+/// to load, but renders the section header even when todayBySource is [].
 export interface LocalUsageSummary {
   generated: string;
   todayDate: string | null;
