@@ -43,7 +43,7 @@ ${pc.cyan('Supported Tools:')}
   Claude Code    ~/.claude/projects/**/*.jsonl
   Codex          ~/.codex/sessions/**/*.jsonl
   Gemini         ~/.gemini/tmp/**/chats/session-*.json
-  OpenCode       ~/.local/share/opencode/storage/**/*.json
+  OpenCode       ~/.local/share/opencode/opencode.db (SQLite)
   Amp            ~/.local/share/amp/threads/**/*.json
   Pi-Agent       ~/.pi/agent/sessions/**/*.jsonl
 `);
@@ -143,8 +143,16 @@ async function main(): Promise<void> {
 			if (watcher.watching > 0) {
 				log(pc.dim(`  Live-watching ${watcher.watching} tool director${watcher.watching === 1 ? 'y' : 'ies'} for changes.\n`));
 			}
-			process.on('SIGINT', () => watcher.close());
-			process.on('SIGTERM', () => watcher.close());
+			// Single shutdown path so the watcher actually gets a chance to close.
+			// Previously startServer registered its own SIGINT handler that called
+			// process.exit(0) before the watcher.close() handler below could run.
+			const shutdown = () => {
+				watcher.close();
+				handle.stop();
+				process.exit(0);
+			};
+			process.on('SIGINT', shutdown);
+			process.on('SIGTERM', shutdown);
 			break;
 	}
 }

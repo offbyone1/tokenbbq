@@ -31,6 +31,8 @@ export interface ServerHandle {
 	 * coalesces overlapping calls.
 	 */
 	notifyDataChanged(): Promise<void>;
+	/** Close the underlying HTTP server. Called by the CLI on shutdown. */
+	stop(): void;
 }
 
 export async function startServer(
@@ -156,20 +158,13 @@ export async function startServer(
 		}
 	});
 
-	process.on('SIGINT', () => {
-		server.close();
-		process.exit(0);
-	});
-
-	process.on('SIGTERM', () => {
-		server.close();
-		process.exit(0);
-	});
-
 	return {
 		notifyDataChanged: async () => {
 			await readData(true);
 			broadcast();
+		},
+		stop: () => {
+			server.close();
 		},
 	};
 }

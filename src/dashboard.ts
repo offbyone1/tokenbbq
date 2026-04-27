@@ -1,5 +1,6 @@
 import type { DashboardData } from './types.js';
 import { SOURCE_COLORS, SOURCE_LABELS } from './types.js';
+import { SOURCE_ORDER } from './aggregator.js';
 
 export function renderDashboard(data: DashboardData, options?: any): string {
 	const jsonData = JSON.stringify(data).replace(/</g, "\\u003c");
@@ -369,7 +370,7 @@ tailwind.config = {
 let DATA = ${jsonData};
 const SOURCE_COLORS = ${JSON.stringify(SOURCE_COLORS)};
 const SOURCE_LABELS = ${JSON.stringify(SOURCE_LABELS)};
-const SOURCE_ORDER = ['claude-code', 'codex', 'opencode', 'amp', 'pi'];
+const SOURCE_ORDER = ${JSON.stringify(SOURCE_ORDER)};
 const BRAND_COLORS = {
   primary: '#E87B35',
   primarySoft: '#E87B3533',

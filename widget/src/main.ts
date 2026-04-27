@@ -91,7 +91,13 @@ async function init(): Promise<void> {
     await win.hide();
   });
 
-  listen("refresh-usage", () => fetchUsage());
+  // Tray "Refresh" → refresh both halves of the pill, matching the in-UI
+  // refresh button. Without this the tray menu silently leaves local-tool
+  // totals stale.
+  listen("refresh-usage", () => {
+    fetchUsage();
+    fetchLocalUsage();
+  });
   listen("resume-polling", () => startPolling());
   setupEventListeners();
   setupDragRegions();
