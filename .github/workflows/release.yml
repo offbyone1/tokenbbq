@@ -9,8 +9,11 @@ permissions:
   contents: write
 
 jobs:
-  publish:
+  publish-cli:
+    name: Publish CLI to npm + create Release
     runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,6 +35,54 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
+        id: create_release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+
+  build-widget:
+    name: Build widget installer + attach to Release
+    needs: publish-cli
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: widget/src-tauri
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Build CLI dist
+        run: npm run build
+
+      - name: Compile sidecar binary (Bun)
+        run: npm run build:sidecar
+
+      - name: Install widget deps
+        run: npm ci
+        working-directory: widget
+
+      # tauri-action runs `tauri build` and uploads the produced installers
+      # (NSIS .exe + MSI on Windows) to the existing Release matching the tag.
+      - name: Build & upload Tauri installer
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: widget
+          tagName: ${{ github.ref_name }}
+          releaseId: ${{ needs.publish-cli.outputs.release_id }}
