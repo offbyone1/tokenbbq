@@ -47,7 +47,11 @@
 		"start": "node dist/index.js",
 		"lint": "tsc --noEmit",
 		"test": "node --test --import tsx \"src/**/*.test.ts\"",
-		"prepublishOnly": "npm run build"
+		"prepublishOnly": "npm run build",
+		"build:sidecar": "node scripts/build-sidecar.mjs",
+		"widget:install": "npm install --prefix widget",
+		"widget:dev": "node scripts/build-sidecar.mjs --skip-if-no-bun && npm run --prefix widget tauri dev",
+		"widget:build": "npm run build && npm run build:sidecar && npm run --prefix widget tauri build"
 	},
 	"dependencies": {
 		"@hono/node-server": "^1.13.0",

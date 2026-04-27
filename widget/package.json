@@ -1,0 +1,27 @@
+{
+  "name": "tokenbbq-widget",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Always-on-top desktop widget for TokenBBQ — showing claude.ai limits + local AI tool usage at a glance",
+  "author": "offbyone1",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "tauri": "tauri",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-autostart": "^2.5.1",
+    "@tauri-apps/plugin-store": "^2"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4",
+    "@tauri-apps/cli": "^2",
+    "tailwindcss": "^4",
+    "typescript": "^5.7",
+    "vite": "^6"
+  }
+}
