@@ -147,7 +147,7 @@ export function renderExpanded(
   html += usageRowHtml("5-Hour Window", usage.five_hour);
   html += usageRowHtml("7-Day Window", usage.seven_day);
 
-  if (usage.extra_usage) {
+  if (usage.extra_usage && usage.extra_usage.is_enabled) {
     const ex = usage.extra_usage;
     const pct = ex.utilization ?? 0;
     const tier = colorTier(pct);
