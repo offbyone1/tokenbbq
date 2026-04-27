@@ -254,13 +254,13 @@ function setupEventListeners(): void {
 
   // Theme
   const themeToggle = document.getElementById("theme-toggle") as HTMLInputElement;
-  const savedTheme = localStorage.getItem("burnrate-theme") || "dark";
+  const savedTheme = localStorage.getItem("tokenbbq-theme") || "dark";
   applyTheme(savedTheme);
   themeToggle.checked = savedTheme === "light";
   themeToggle.addEventListener("change", () => {
     const theme = themeToggle.checked ? "light" : "dark";
     applyTheme(theme);
-    localStorage.setItem("burnrate-theme", theme);
+    localStorage.setItem("tokenbbq-theme", theme);
   });
 }
 

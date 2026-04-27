@@ -15,7 +15,7 @@ function parseArgs(argv: string[]) {
 	const command = args.find((a) => !a.startsWith('-')) ?? 'dashboard';
 	const port = Number(args.find((a) => a.startsWith('--port='))?.split('=')[1] ?? 3000);
 	// `scan` is a headless one-shot: emit DashboardData JSON to stdout and exit.
-	// It implies --json so embedders (e.g. BurnRate sidecar) only need the verb.
+	// It implies --json so embedders (e.g. the desktop widget sidecar) only need the verb.
 	const json = args.includes('--json') || command === 'scan';
 	const noOpen = args.includes('--no-open');
 	const help = args.includes('--help') || args.includes('-h');

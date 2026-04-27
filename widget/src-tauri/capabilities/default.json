@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "description": "Default capabilities for BurnRate",
+  "description": "Default capabilities for the TokenBBQ widget",
   "windows": ["main"],
   "permissions": [
     "core:default",
