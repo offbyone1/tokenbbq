@@ -5,8 +5,8 @@ export interface WindowUsage {
 
 export interface ExtraUsage {
   is_enabled: boolean;
-  monthly_limit: number;
-  used_credits: number;
+  monthly_limit: number | null;
+  used_credits: number | null;
   utilization: number | null;
 }
 

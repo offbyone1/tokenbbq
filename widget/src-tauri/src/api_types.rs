@@ -16,8 +16,8 @@ pub struct WindowUsage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtraUsage {
     pub is_enabled: bool,
-    pub monthly_limit: f64,
-    pub used_credits: f64,
+    pub monthly_limit: Option<f64>,
+    pub used_credits: Option<f64>,
     pub utilization: Option<f64>,
 }
 
