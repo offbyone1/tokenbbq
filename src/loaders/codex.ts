@@ -145,13 +145,19 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 			if (extracted) currentModel = extracted;
 			const model = currentModel ?? FALLBACK_MODEL;
 
+			// OpenAI reports `input_tokens` as the TOTAL prompt size including
+			// the cached portion; `cached_input_tokens` is the subset served from
+			// cache. Storing both verbatim double-counts cache reads inside
+			// `input`. Split them so `tokens.input` is fresh-input only — matches
+			// the semantics of every other loader (Claude Code, Gemini, etc.).
+			const freshInput = Math.max(raw.input - raw.cached, 0);
 			events.push({
 				source: 'codex',
 				timestamp,
 				sessionId,
 				model,
 				tokens: {
-					input: raw.input,
+					input: freshInput,
 					output: raw.output,
 					cacheCreation: 0,
 					cacheRead: raw.cached,
