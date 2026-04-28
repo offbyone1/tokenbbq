@@ -8,6 +8,13 @@ on:
 permissions:
   contents: write
 
+# Opt all JS actions into Node.js 24 — Node 20 is deprecated as of GitHub's
+# 2025-09-19 changelog and will be forced on 2026-06-02. Setting this now
+# silences the runner warning and exercises the post-cutover behaviour
+# before it becomes mandatory.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   publish-cli:
     name: Publish CLI to npm + create Release
