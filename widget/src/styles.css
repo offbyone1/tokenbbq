@@ -612,6 +612,22 @@ body {
   color: var(--text-primary);
 }
 
+.settings-hint ol {
+  list-style: decimal;
+  margin: 4px 0 0;
+  padding-left: 22px;
+}
+
+.settings-hint li {
+  margin-top: 2px;
+  padding-left: 2px;
+}
+
+.settings-hint li::marker {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .settings-footer {
   display: flex;
   gap: 6px;
