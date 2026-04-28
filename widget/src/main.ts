@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isEnabled, enable, disable } from "@tauri-apps/plugin-autostart";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { ClaudeUsageResponse, LocalUsageSummary, Settings, SettingsDisplay } from "./types";
 import { renderCompact, renderExpanded, renderError, renderLocalCompact, setViewState } from "./ui";
 
@@ -75,6 +76,17 @@ function stopPolling(): void {
 }
 
 async function init(): Promise<void> {
+  // WebView2 on Windows renders an opaque default background even when the
+  // window is set to transparent — the result is a grey rectangle around the
+  // rounded pill. Forcing the webview's background to fully transparent
+  // (alpha 0) makes Windows actually honour the window-level transparency.
+  // No-op on macOS where macos-private-api already takes care of it.
+  try {
+    await getCurrentWebview().setBackgroundColor({ red: 0, green: 0, blue: 0, alpha: 0 });
+  } catch {
+    // Older Tauri versions / unsupported platforms — fall through.
+  }
+
   const settings = await invoke<SettingsDisplay>("load_settings");
 
   if (settings.has_session_key) {

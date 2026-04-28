@@ -59,7 +59,12 @@ html { background: transparent; }
 
 body {
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: transparent;
+  /* Rounded body acts as the outer shape on both platforms. WebView2 on
+     Windows ignores window-level `transparent: true` reliably enough that
+     we can't depend on it for the corner shape — clipping the body itself
+     makes the rendered widget round regardless of WebView2 quirks. */
+  background: var(--card);
+  border-radius: 14px;
   color: var(--text-primary);
   overflow: hidden;
   user-select: none;
