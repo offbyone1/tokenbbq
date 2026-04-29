@@ -153,13 +153,6 @@ body {
   margin-right: 8px;
   position: relative;
   z-index: 1;
-  filter: drop-shadow(0 0 4px rgba(232, 123, 53, 0.5));
-  animation: fire-pulse 2s ease-in-out infinite;
-}
-
-@keyframes fire-pulse {
-  0%, 100% { filter: drop-shadow(0 0 4px rgba(232, 123, 53, 0.4)); }
-  50% { filter: drop-shadow(0 0 8px rgba(232, 123, 53, 0.7)); }
 }
 
 .pill-provider {

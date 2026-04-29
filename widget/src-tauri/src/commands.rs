@@ -1,11 +1,20 @@
 use std::path::PathBuf;
 use std::process::Stdio;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use tauri::{AppHandle, State};
 use tauri_plugin_store::StoreExt;
 
 use crate::api_types::{ClaudeUsageResponse, LocalUsageSummary, Settings, SettingsDisplay, SourceSpend};
 
 const USER_AGENT: &str = concat!("TokenBBQ-Widget/", env!("CARGO_PKG_VERSION"));
+
+// Suppresses the console window that Windows would otherwise flash whenever
+// a GUI process spawns a console-subsystem child. The widget polls the
+// TokenBBQ sidecar regularly, so without this flag users see a cmd window
+// pop up every refresh.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 fn is_valid_uuid(s: &str) -> bool {
     s.len() == 36
@@ -271,6 +280,8 @@ pub async fn open_full_dashboard() -> Result<(), String> {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
         if let Some(p) = logo_path.as_deref() {
             if std::path::Path::new(p).exists() {
                 cmd.env("TOKENBBQ_LOGO_PATH", p);
@@ -292,8 +303,8 @@ pub async fn fetch_local_usage() -> Result<LocalUsageSummary, String> {
     // std::process::Command in spawn_blocking — keeps tokio dependencies minimal
     // (no need for the `process` feature flag) and the scan is short-lived.
     let output = tokio::task::spawn_blocking(move || {
-        std::process::Command::new(&program)
-            .args(&args)
+        let mut cmd = std::process::Command::new(&program);
+        cmd.args(&args)
             // Explicitly null stdin — when the widget runs as a GUI process
             // there is no inherited tty, and Bun-compiled binaries have been
             // observed to hang during init on Windows when stdin is left as
@@ -301,8 +312,10 @@ pub async fn fetch_local_usage() -> Result<LocalUsageSummary, String> {
             // codepath.
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
+            .stderr(Stdio::piped());
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.output()
     })
     .await
     .map_err(|e| format!("Task error: {}", e))?
