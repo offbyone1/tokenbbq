@@ -80,6 +80,25 @@ function formatResetDate(isoString: string | null): string {
   return `Resets ${new Date(isoString).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 }
 
+// Compact pill labels: just the unit-of-time-until-reset, no prose. Returns
+// "" when we don't have a timestamp yet so callers can fall back to a static
+// placeholder instead of rendering an empty label.
+function formatHoursCompact(isoString: string | null): string {
+  if (!isoString) return "";
+  const diffMs = new Date(isoString).getTime() - Date.now();
+  if (diffMs <= 0) return "0m";
+  const totalMin = Math.floor(diffMs / 60000);
+  if (totalMin < 60) return `${totalMin}m`;
+  return `${Math.floor(totalMin / 60)}h`;
+}
+
+function formatDaysCompact(isoString: string | null): string {
+  if (!isoString) return "";
+  const diffMs = new Date(isoString).getTime() - Date.now();
+  if (diffMs <= 0) return "0d";
+  return `${Math.ceil(diffMs / 86400000)}d`;
+}
+
 const clockSvg = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8a6.5 6.5 0 1 1 1 3.5"/><path d="M1 5v3.5H4.5"/></svg>`;
 
 function usageRowHtml(
@@ -109,6 +128,8 @@ function usageRowHtml(
 export function renderCompact(usage: ClaudeUsageResponse): void {
   const fiveHour = document.getElementById("five-hour-compact")!;
   const sevenDay = document.getElementById("seven-day-compact")!;
+  const fiveHourLabel = document.getElementById("five-hour-label")!;
+  const sevenDayLabel = document.getElementById("seven-day-label")!;
 
   const fhPct = usage.five_hour?.utilization ?? 0;
   const sdPct = usage.seven_day?.utilization ?? 0;
@@ -117,6 +138,13 @@ export function renderCompact(usage: ClaudeUsageResponse): void {
   fiveHour.style.color = utilizationColor(fhPct);
   sevenDay.textContent = `${Math.round(sdPct)}%`;
   sevenDay.style.color = utilizationColor(sdPct);
+
+  // Time-until-reset replaces the static window-length labels. Fall back to
+  // the original "5h"/"7d" strings if resets_at is missing (initial load).
+  const fhRemaining = formatHoursCompact(usage.five_hour?.resets_at ?? null);
+  const sdRemaining = formatDaysCompact(usage.seven_day?.resets_at ?? null);
+  fiveHourLabel.textContent = fhRemaining || "5h";
+  sevenDayLabel.textContent = sdRemaining || "7d";
 }
 
 /// Render the local-AI-tools half of the compact pill. Pass null to hide the

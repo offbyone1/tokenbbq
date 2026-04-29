@@ -8,15 +8,15 @@ use tauri::{
 };
 
 // Anchor the pill on the right edge of the primary monitor, vertically
-// at ~60% screen height — slightly below center, with enough room above
-// and below for the popover to stay on-screen when expanded.
+// at ~75% screen height — well below the geometric center, far enough
+// from the bottom that the expanded popover still has room to grow up.
 fn position_widget(win: &WebviewWindow) {
     let Ok(Some(monitor)) = win.primary_monitor() else { return };
     let Ok(win_size) = win.outer_size() else { return };
     let mon = monitor.size();
     const RIGHT_MARGIN: i32 = 24;
     let x = mon.width as i32 - win_size.width as i32 - RIGHT_MARGIN;
-    let y = (mon.height as i32 * 60 / 100) - (win_size.height as i32 / 2);
+    let y = (mon.height as i32 * 75 / 100) - (win_size.height as i32 / 2);
     let _ = win.set_position(PhysicalPosition::new(x, y));
 }
 
@@ -40,7 +40,6 @@ pub fn run() {
 
             if let Some(win) = app.get_webview_window("main") {
                 position_widget(&win);
-                let _ = win.show();
             }
 
             let show = MenuItem::with_id(app, "show", "Show TokenBBQ", true, None::<&str>)?;
