@@ -39,6 +39,27 @@ pub struct SettingsDisplay {
     pub saved_at: Option<u64>,
 }
 
+/// Mirror of TokenBBQ's CodexRateLimits TS interface. Field names use
+/// camelCase to match the JSON the sidecar emits (TS interface uses
+/// camelCase; serde_json reads it via the projection in fetch_local_usage,
+/// so we deserialize directly when present).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexWindowUsage {
+    pub utilization: f64,
+    pub window_minutes: u32,
+    pub resets_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexUsage {
+    pub plan_type: Option<String>,
+    pub primary: Option<CodexWindowUsage>,
+    pub secondary: Option<CodexWindowUsage>,
+    pub snapshot_at: String,
+}
+
 /// Tight projection of TokenBBQ's DashboardData — just what the widget needs.
 /// Built by `fetch_local_usage` from the JSON output of `tokenbbq scan`.
 /// Token totals exclude `cacheRead` and `cacheCreation` — see
@@ -56,6 +77,10 @@ pub struct LocalUsageSummary {
     /// Per-source breakdown for `today_date`. Order is whatever `tokenbbq scan`
     /// emits; the UI re-sorts client-side.
     pub today_by_source: Vec<SourceSpend>,
+    /// Live Codex rate-limit snapshot, projected from the sidecar JSON.
+    /// None when Codex isn't installed, no rate-limits event was ever
+    /// emitted, or the user has API-key auth (plan_type null).
+    pub codex_usage: Option<CodexUsage>,
 }
 
 #[derive(Debug, Clone, Serialize)]
