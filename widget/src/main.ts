@@ -294,22 +294,29 @@ function setupEventListeners(): void {
     }
   });
 
-  document.getElementById("usage-bars")!.addEventListener("change", (e) => {
+  document.getElementById("usage-bars")!.addEventListener("change", async (e) => {
     const target = e.target as HTMLInputElement;
     if (target.id === "toggle-claude") toggleState.claude = target.checked;
     else if (target.id === "toggle-codex") toggleState.codex = target.checked;
     else return;
     saveToggleState(toggleState);
+
+    // Snapshot the mode once so renderCompact and setViewState see the
+    // same value even though the latter is async.
+    const mode = currentMode();
+
+    // Resize FIRST, then mutate DOM. Otherwise the second row appears
+    // for one paint frame inside a still-64px window and gets clipped —
+    // visible flash on Windows/WebView2 when toggling into dual-mode.
+    if (currentView === "compact") {
+      await setViewState("compact", mode);
+    }
     if (lastUsageJson) {
       try {
         const usage = JSON.parse(lastUsageJson) as ClaudeUsageResponse;
         renderCompact(usage, lastLocal, toggleState);
         renderExpanded(usage, lastLocal, toggleState);
       } catch {}
-    }
-    if (currentView === "compact") {
-      // Resize the window to match the new mode (single→dual or dual→single).
-      setViewState("compact", currentMode()).catch(() => {});
     }
   });
 

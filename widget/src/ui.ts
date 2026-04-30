@@ -125,10 +125,13 @@ export function renderCompact(
   const fiveHourLabel = document.getElementById("five-hour-label")!;
   const sevenDayLabel = document.getElementById("seven-day-label")!;
 
-  // Helper: reset to single-row layout (hide secondary row + logos).
+  // Helper: reset to single-row layout (hide secondary row + logos,
+  // clear stale logo SVG so a future refactor can't leak ghost content).
   function setSingleRowVisibility(): void {
     document.getElementById('pill-row-secondary')!.setAttribute('hidden', '');
     document.getElementById('pill-row-logo-primary')!.setAttribute('hidden', '');
+    document.getElementById('pill-row-logo-primary')!.innerHTML = '';
+    document.getElementById('pill-row-logo-secondary')!.innerHTML = '';
   }
 
   if (mode === 'both' && codex) {
