@@ -81,7 +81,7 @@ async function main(): Promise<void> {
 	log(pc.dim('  Scanning for AI tool usage data...\n'));
 
 	const store: StoreState = loadStore();
-	const { events: scanned, detected, errors } = await loadAll(json);
+	const { events: scanned, detected, errors, codexRateLimits } = await loadAll(json);
 	const added = appendEvents(store, scanned);
 
 	// Surface loader failures rather than silently dropping them. In JSON
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
 		// In JSON mode (incl. `scan`) emit a valid empty DashboardData rather than
 		// returning silently — embedders can then unconditionally JSON.parse stdout.
 		if (json) {
-			process.stdout.write(JSON.stringify(buildDashboardData([]), null, 2));
+			process.stdout.write(JSON.stringify(buildDashboardData([], codexRateLimits), null, 2));
 			return;
 		}
 		console.error(pc.yellow('\n  No usage data found.'));
@@ -108,7 +108,7 @@ async function main(): Promise<void> {
 	log(pc.dim('  Calculating costs...'));
 	await enrichCosts(store.events);
 
-	const data = buildDashboardData(store.events);
+	const data = buildDashboardData(store.events, codexRateLimits);
 
 	if (json) {
 		process.stdout.write(JSON.stringify(data, null, 2));
@@ -116,10 +116,10 @@ async function main(): Promise<void> {
 	}
 
 	const reloadDashboardData = async () => {
-		const { events: fresh } = await loadAll(true);
+		const { events: fresh, codexRateLimits: freshLimits } = await loadAll(true);
 		const addedNow = appendEvents(store, fresh);
 		if (addedNow.length > 0) await enrichCosts(addedNow);
-		return buildDashboardData(store.events);
+		return buildDashboardData(store.events, freshLimits);
 	};
 
 	switch (command) {

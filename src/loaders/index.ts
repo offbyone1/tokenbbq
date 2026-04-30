@@ -1,8 +1,8 @@
 import pc from 'picocolors';
-import type { Source, UnifiedTokenEvent } from '../types.js';
+import type { Source, UnifiedTokenEvent, CodexRateLimits } from '../types.js';
 import { SOURCE_LABELS } from '../types.js';
 import { loadClaudeEvents, getClaudeWatchPaths } from './claude.js';
-import { loadCodexEvents, getCodexWatchPaths } from './codex.js';
+import { loadCodexEvents, getCodexWatchPaths, loadCodexRateLimits } from './codex.js';
 import { loadGeminiEvents, getGeminiWatchPaths } from './gemini.js';
 import { loadOpenCodeEvents, getOpenCodeWatchPaths } from './opencode.js';
 import { loadAmpEvents, getAmpWatchPaths } from './amp.js';
@@ -41,6 +41,7 @@ export type LoadAllResult = {
 	events: UnifiedTokenEvent[];
 	detected: Source[];
 	errors: Array<{ source: Source; error: string }>;
+	codexRateLimits: CodexRateLimits | null;
 };
 
 export async function loadAll(quiet = false): Promise<LoadAllResult> {
@@ -49,12 +50,18 @@ export async function loadAll(quiet = false): Promise<LoadAllResult> {
 	const errors: Array<{ source: Source; error: string }> = [];
 	const log = quiet ? () => {} : console.error.bind(console);
 
-	const results = await Promise.allSettled(
-		LOADERS.map(async (loader) => {
-			const loaderEvents = await loader.load({ quiet });
-			return { source: loader.source, events: loaderEvents };
+	const [results, codexRateLimits] = await Promise.all([
+		Promise.allSettled(
+			LOADERS.map(async (loader) => {
+				const loaderEvents = await loader.load({ quiet });
+				return { source: loader.source, events: loaderEvents };
+			}),
+		),
+		loadCodexRateLimits().catch((err) => {
+			log(pc.yellow(`  warn: codex rate-limits read failed: ${String(err)}`));
+			return null;
 		}),
-	);
+	]);
 
 	for (const result of results) {
 		if (result.status === 'fulfilled') {
@@ -75,5 +82,5 @@ export async function loadAll(quiet = false): Promise<LoadAllResult> {
 	}
 
 	events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-	return { events, detected, errors };
+	return { events, detected, errors, codexRateLimits };
 }

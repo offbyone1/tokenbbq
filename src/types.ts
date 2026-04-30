@@ -137,6 +137,14 @@ export interface DashboardData {
 	bySourceModel: SourceModelAggregation[];
 	byProject: ProjectAggregation[];
 	heatmap: HeatmapCell[];
+	/**
+	 * Live snapshot of Codex CLI rate-limit state. Null when:
+	 *   - Codex isn't installed
+	 *   - the user has no session containing a rate_limits-bearing event
+	 *   - the user authenticates via OPENAI_API_KEY (planType = null)
+	 * Consumers should treat null as "Codex limits unavailable".
+	 */
+	codexRateLimits: CodexRateLimits | null;
 }
 
 export function emptyTokens(): TokenCounts {
