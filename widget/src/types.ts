@@ -31,12 +31,20 @@ export interface SettingsDisplay {
 
 export type ViewState = "compact" | "expanded" | "settings";
 
+/** Mirrors `api_types::SourceSpend` on the Rust side. */
+export interface SourceSpend {
+  source: string;
+  tokens: number;
+}
+
+/** Mirrors `api_types::CodexWindowUsage`. utilization is 0-100. */
 export interface CodexWindowUsage {
   utilization: number;
   windowMinutes: number;
   resetsAt: string | null;
 }
 
+/** Mirrors `api_types::CodexUsage`. planType is null for API-key auth. */
 export interface CodexUsage {
   planType: string | null;
   primary: CodexWindowUsage | null;
@@ -44,15 +52,13 @@ export interface CodexUsage {
   snapshotAt: string;
 }
 
-/// Mirrors `api_types::SourceSpend` on the Rust side.
-export interface SourceSpend {
-  source: string;
-  tokens: number;
-}
-
-/// Mirrors `api_types::LocalUsageSummary`. todayDate is null when the store
-/// is empty. The widget hides the local zone when the entire summary fails
-/// to load, but renders the section header even when todayBySource is [].
+/**
+ * Mirrors `api_types::LocalUsageSummary`. todayDate is null when the store
+ * is empty. codexUsage is null when Codex isn't installed, no plan is
+ * detected, or the user uses API-key auth. The widget hides the local
+ * zone when the entire summary fails to load, but renders the section
+ * header even when todayBySource is [].
+ */
 export interface LocalUsageSummary {
   generated: string;
   todayDate: string | null;

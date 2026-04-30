@@ -28,6 +28,7 @@ export function loadToggleState(): SourceToggleState {
   };
 }
 
+/** Persist the current toggle state. Call after any mutation. */
 export function saveToggleState(state: SourceToggleState): void {
   localStorage.setItem(STORAGE_KEY_CLAUDE, state.claude ? '1' : '0');
   localStorage.setItem(STORAGE_KEY_CODEX, state.codex ? '1' : '0');
@@ -48,5 +49,5 @@ export function resolveMode(
   const effCodex = state.codex && hasCodexData;
   if (effClaude && effCodex) return 'both';
   if (effCodex) return 'codex';
-  return 'claude';  // default — matches legacy behavior even if !hasClaudeData
+  return 'claude'; // default — matches legacy behavior even if !hasClaudeData
 }
