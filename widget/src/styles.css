@@ -113,11 +113,10 @@ body {
 .pill:active { transform: scale(0.99); }
 
 .pill.dual-mode {
-  /* Two rows of single-mode-sized metric chips need enough vertical
-     room that the chip text/border doesn't clip top or bottom. 116px
-     pill (window 128px) gives a small uniform breathing margin around
-     each row at the same chip styling as single mode. */
-  height: 116px;
+  /* Two rows of single-mode chips. 120px pill (window 134) leaves a
+     comfortable vertical margin so chip borders aren't flush with
+     the pill edge. */
+  height: 120px;
 }
 
 .pill.hidden-pill {
@@ -243,16 +242,21 @@ body {
    was being ignored under the parent's align-items: center. The 70px
    gives a clean separator that visually spans both metric rows. */
 .pill.dual-mode .pill-divider {
-  height: 80px;
+  height: 84px;
 }
 
-/* Dual-mode only: rate-limit chips become uniform at the widest
-   realistic content size ("100% 7d"). Single-mode keeps natural
-   sizing. The dual window is 20px wider to fit 2 fixed chips +
-   divider + today + grip without cutoff. */
+/* Dual-mode only: rate-limit chips fixed at the widest realistic
+   content size ("100% 7d" ≈ 76px). Belt-and-suspenders here because
+   flex shrinking has bitten this layout twice already — flex basis +
+   min + max + width + box-sizing leaves no path for the chip to drift.
+   Single-mode keeps natural sizing. */
 .pill.dual-mode .pill-row .pill-metric {
+  flex: 0 0 76px;
   width: 76px;
+  min-width: 76px;
+  max-width: 76px;
   justify-content: center;
+  box-sizing: border-box;
 }
 
 /* === EXPANDED PANEL === */

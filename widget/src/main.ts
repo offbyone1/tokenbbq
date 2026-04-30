@@ -35,6 +35,12 @@ async function fetchUsage(): Promise<void> {
     lastUsageJson = json;
     renderCompact(usage, lastLocal, toggleState);
     renderExpanded(usage, lastLocal, toggleState);
+    // Sync window size to mode — covers the case where dev-mode CSS
+    // edits change the dual-mode dimensions but the user hasn't
+    // toggled to trigger a setSize.
+    if (currentView === "compact") {
+      setViewState("compact", currentMode()).catch(() => {});
+    }
   } catch (e) {
     renderError(String(e));
   }
@@ -58,6 +64,9 @@ async function fetchLocalUsage(): Promise<void> {
         const usage = JSON.parse(lastUsageJson) as ClaudeUsageResponse;
         renderCompact(usage, local, toggleState);
         renderExpanded(usage, local, toggleState);
+        if (currentView === "compact") {
+          setViewState("compact", currentMode()).catch(() => {});
+        }
       } catch {}
     }
   } catch (e) {
