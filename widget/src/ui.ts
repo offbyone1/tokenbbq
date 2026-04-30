@@ -1,5 +1,6 @@
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import type { ClaudeUsageResponse, LocalUsageSummary, ViewState } from "./types";
+import type { SourceToggleState } from "./source-toggle";
 
 const COMPACT_SIZE = { width: 320, height: 64 };
 const EXPANDED_WIDTH = 320;
@@ -101,6 +102,29 @@ function formatDaysCompact(isoString: string | null): string {
 
 const clockSvg = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8a6.5 6.5 0 1 1 1 3.5"/><path d="M1 5v3.5H4.5"/></svg>`;
 
+// Placeholder shapes — replaced with real brand SVGs in Task 8.
+const claudeBadgeSvg = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>`;
+const codexBadgeSvg = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/></svg>`;
+
+function toggleRowHtml(
+  id: string,
+  label: string,
+  logoSvg: string,
+  checked: boolean,
+  disabled: boolean,
+  hint?: string,
+): string {
+  return `
+    <div class="source-toggle-row${disabled ? ' disabled' : ''}">
+      <span class="source-toggle-logo">${logoSvg}</span>
+      <span class="source-toggle-label">${label}${hint ? `<span class="source-toggle-hint">${hint}</span>` : ''}</span>
+      <label class="source-toggle-switch">
+        <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+        <span class="source-toggle-slider"></span>
+      </label>
+    </div>`;
+}
+
 function usageRowHtml(
   name: string,
   usage: { utilization: number; resets_at: string | null } | null,
@@ -168,10 +192,21 @@ export function renderLocalCompact(local: LocalUsageSummary | null): void {
 export function renderExpanded(
   usage: ClaudeUsageResponse,
   local: LocalUsageSummary | null = null,
+  toggleState: SourceToggleState = { claude: true, codex: false },
 ): void {
   const container = document.getElementById("usage-bars")!;
 
-  let html = `<div class="section-header">Claude.ai Subscription</div>`;
+  const codex = local?.codexUsage ?? null;
+  const codexAvailable = codex !== null && codex.planType !== null;
+  const codexHint = codex === null
+    ? '(no data)'
+    : (codex.planType === null ? '(API key — no plan)' : '');
+
+  let html = `<div class="section-header">Pill displays</div>`;
+  html += `<div class="source-toggle-list">`;
+  html += toggleRowHtml('toggle-claude', 'Claude Code', claudeBadgeSvg, toggleState.claude, false);
+  html += toggleRowHtml('toggle-codex', 'Codex', codexBadgeSvg, toggleState.codex && codexAvailable, !codexAvailable, codexHint);
+  html += `</div>`;
   html += usageRowHtml("5-Hour Window", usage.five_hour);
   html += usageRowHtml("7-Day Window", usage.seven_day);
 

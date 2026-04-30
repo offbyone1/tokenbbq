@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { ClaudeUsageResponse, LocalUsageSummary, Settings, SettingsDisplay } from "./types";
-import { loadToggleState, type SourceToggleState } from "./source-toggle";
+import { loadToggleState, saveToggleState, type SourceToggleState } from "./source-toggle";
 import { renderCompact, renderExpanded, renderError, renderLocalCompact, setViewState } from "./ui";
 
 const SESSION_KEY_LIFETIME_MS = 28 * 24 * 60 * 60 * 1000;
@@ -25,7 +25,7 @@ async function fetchUsage(): Promise<void> {
     if (json === lastUsageJson) return;
     lastUsageJson = json;
     renderCompact(usage);
-    renderExpanded(usage, lastLocal);
+    renderExpanded(usage, lastLocal, toggleState);
   } catch (e) {
     renderError(String(e));
   }
@@ -45,7 +45,7 @@ async function fetchLocalUsage(): Promise<void> {
     if (lastUsageJson) {
       try {
         const usage = JSON.parse(lastUsageJson) as ClaudeUsageResponse;
-        renderExpanded(usage, local);
+        renderExpanded(usage, local, toggleState);
       } catch {}
     }
   } catch (e) {
@@ -279,6 +279,22 @@ function setupEventListeners(): void {
       await enable();
     } else {
       await disable();
+    }
+  });
+
+  document.getElementById("usage-bars")!.addEventListener("change", (e) => {
+    const target = e.target as HTMLInputElement;
+    if (target.id === "toggle-claude") toggleState.claude = target.checked;
+    else if (target.id === "toggle-codex") toggleState.codex = target.checked;
+    else return;
+    saveToggleState(toggleState);
+    // Re-render expanded so the toggles reflect the persisted state
+    // even after a refresh. Pill update comes in Task 6.
+    if (lastUsageJson) {
+      try {
+        const usage = JSON.parse(lastUsageJson) as ClaudeUsageResponse;
+        renderExpanded(usage, lastLocal, toggleState);
+      } catch {}
     }
   });
 
