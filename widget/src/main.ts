@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { ClaudeUsageResponse, LocalUsageSummary, Settings, SettingsDisplay } from "./types";
-import { loadToggleState, saveToggleState, type SourceToggleState } from "./source-toggle";
+import { loadToggleState, saveToggleState, resolveMode, type SourceToggleState } from "./source-toggle";
 import { renderCompact, renderExpanded, renderError, renderLocalCompact, setViewState } from "./ui";
 
 const SESSION_KEY_LIFETIME_MS = 28 * 24 * 60 * 60 * 1000;
@@ -17,6 +17,15 @@ let localPollTimer: ReturnType<typeof setInterval> | null = null;
 let lastUsageJson = "";
 let lastLocal: LocalUsageSummary | null = null;
 let toggleState: SourceToggleState = loadToggleState();
+
+function currentMode() {
+  const usage = lastUsageJson ? JSON.parse(lastUsageJson) as ClaudeUsageResponse : null;
+  const hasClaude = !!(usage?.five_hour || usage?.seven_day);
+  const codex = lastLocal?.codexUsage ?? null;
+  const hasCodex = !!(codex && codex.planType !== null
+    && (codex.primary || codex.secondary));
+  return resolveMode(toggleState, hasClaude, hasCodex);
+}
 
 async function fetchUsage(): Promise<void> {
   try {
@@ -98,7 +107,7 @@ async function init(): Promise<void> {
     // Resync window size to compact in case a Vite hot-reload (or any prior
     // state desync) left the window at expanded dimensions while the JS
     // state booted in compact mode.
-    await setViewState("compact");
+    await setViewState("compact", currentMode());
     startPolling();
   } else {
     await expand();
@@ -131,7 +140,7 @@ async function expand(): Promise<void> {
 
 async function collapse(): Promise<void> {
   currentView = "compact";
-  await setViewState("compact");
+  await setViewState("compact", currentMode());
 }
 
 async function openSettings(): Promise<void> {
@@ -297,6 +306,10 @@ function setupEventListeners(): void {
         renderCompact(usage, lastLocal, toggleState);
         renderExpanded(usage, lastLocal, toggleState);
       } catch {}
+    }
+    if (currentView === "compact") {
+      // Resize the window to match the new mode (single→dual or dual→single).
+      setViewState("compact", currentMode()).catch(() => {});
     }
   });
 

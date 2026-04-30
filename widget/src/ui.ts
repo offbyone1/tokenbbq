@@ -1,8 +1,13 @@
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import type { ClaudeUsageResponse, LocalUsageSummary, ViewState } from "./types";
-import { resolveMode, type SourceToggleState } from "./source-toggle";
+import { resolveMode, type SourceMode, type SourceToggleState } from "./source-toggle";
 
-const COMPACT_SIZE = { width: 320, height: 64 };
+const COMPACT_SIZE_SINGLE = { width: 320, height: 64 };
+const COMPACT_SIZE_DUAL = { width: 320, height: 100 };
+
+export function compactSizeForMode(mode: SourceMode): { width: number; height: number } {
+  return mode === 'both' ? COMPACT_SIZE_DUAL : COMPACT_SIZE_SINGLE;
+}
 const EXPANDED_WIDTH = 320;
 // Initial guess; the real height is recomputed from content via fitExpandedToContent.
 const EXPANDED_INITIAL_HEIGHT = 320;
@@ -115,12 +120,52 @@ export function renderCompact(
     && (codex.primary !== null || codex.secondary !== null);
   const mode = resolveMode(toggleState, hasClaude, hasCodex);
 
-  const fiveHour = document.getElementById("five-hour-compact")!;
-  const sevenDay = document.getElementById("seven-day-compact")!;
+  const fiveHour = document.getElementById("five-hour-compact")! as HTMLElement;
+  const sevenDay = document.getElementById("seven-day-compact")! as HTMLElement;
   const fiveHourLabel = document.getElementById("five-hour-label")!;
   const sevenDayLabel = document.getElementById("seven-day-label")!;
 
+  // Helper: reset to single-row layout (hide secondary row + logos).
+  function setSingleRowVisibility(): void {
+    document.getElementById('pill-row-secondary')!.setAttribute('hidden', '');
+    document.getElementById('pill-row-logo-primary')!.setAttribute('hidden', '');
+  }
+
+  if (mode === 'both' && codex) {
+    // Show secondary row + both logos
+    document.getElementById('pill-row-secondary')!.removeAttribute('hidden');
+    document.getElementById('pill-row-logo-primary')!.removeAttribute('hidden');
+    document.getElementById('pill-row-logo-primary')!.innerHTML = claudeBadgeSvg;
+    document.getElementById('pill-row-logo-secondary')!.innerHTML = codexBadgeSvg;
+
+    // Primary row = Claude
+    const fhPctC = usage.five_hour?.utilization ?? 0;
+    const sdPctC = usage.seven_day?.utilization ?? 0;
+    fiveHour.textContent = `${Math.round(fhPctC)}%`;
+    fiveHour.style.color = utilizationColor(fhPctC);
+    sevenDay.textContent = `${Math.round(sdPctC)}%`;
+    sevenDay.style.color = utilizationColor(sdPctC);
+    fiveHourLabel.textContent = formatHoursCompact(usage.five_hour?.resets_at ?? null) || "5h";
+    sevenDayLabel.textContent = formatDaysCompact(usage.seven_day?.resets_at ?? null) || "7d";
+
+    // Secondary row = Codex
+    const fhPctX = codex.primary?.utilization ?? 0;
+    const sdPctX = codex.secondary?.utilization ?? 0;
+    const fh2 = document.getElementById('five-hour-compact-2')! as HTMLElement;
+    const sd2 = document.getElementById('seven-day-compact-2')! as HTMLElement;
+    const fh2l = document.getElementById('five-hour-label-2')!;
+    const sd2l = document.getElementById('seven-day-label-2')!;
+    fh2.textContent = `${Math.round(fhPctX)}%`;
+    fh2.style.color = utilizationColor(fhPctX);
+    sd2.textContent = `${Math.round(sdPctX)}%`;
+    sd2.style.color = utilizationColor(sdPctX);
+    fh2l.textContent = formatHoursCompact(codex.primary?.resetsAt ?? null) || "5h";
+    sd2l.textContent = formatDaysCompact(codex.secondary?.resetsAt ?? null) || "7d";
+    return;
+  }
+
   if (mode === 'codex' && codex) {
+    setSingleRowVisibility();
     const fhPct = codex.primary?.utilization ?? 0;
     const sdPct = codex.secondary?.utilization ?? 0;
     fiveHour.textContent = `${Math.round(fhPct)}%`;
@@ -132,7 +177,8 @@ export function renderCompact(
     return;
   }
 
-  // Default + 'both' (Task 7 will handle 'both' specifically): claude single layout.
+  // Default (claude single layout).
+  setSingleRowVisibility();
   const fhPct = usage.five_hour?.utilization ?? 0;
   const sdPct = usage.seven_day?.utilization ?? 0;
   fiveHour.textContent = `${Math.round(fhPct)}%`;
@@ -296,7 +342,7 @@ export function renderError(message: string): void {
     </div>`;
 }
 
-export async function setViewState(state: ViewState): Promise<void> {
+export async function setViewState(state: ViewState, mode: SourceMode = 'claude'): Promise<void> {
   const pill = document.getElementById("compact-view")!;
   const panel = document.getElementById("expanded-view")!;
   const settings = document.getElementById("settings-overlay")!;
@@ -306,7 +352,9 @@ export async function setViewState(state: ViewState): Promise<void> {
     settings.classList.remove("visible");
     panel.classList.remove("visible");
     pill.classList.remove("hidden-pill");
-    await win.setSize(new LogicalSize(COMPACT_SIZE.width, COMPACT_SIZE.height));
+    pill.classList.toggle("dual-mode", mode === 'both');
+    const sz = compactSizeForMode(mode);
+    await win.setSize(new LogicalSize(sz.width, sz.height));
   } else if (state === "expanded") {
     settings.classList.remove("visible");
     pill.classList.add("hidden-pill");

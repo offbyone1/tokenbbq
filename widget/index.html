@@ -11,14 +11,32 @@
     <!-- Compact Pill -->
     <div id="compact-view" class="pill">
       <img src="/src/assets/tokenbbq-icon.png" alt="" class="pill-fire" width="30" height="30">
-      <div class="pill-metrics">
-        <div class="pill-metric">
-          <span class="pill-metric-value" id="five-hour-compact">—</span>
-          <span class="pill-metric-label" id="five-hour-label">5h</span>
+      <div class="pill-rows" id="pill-rows">
+        <div class="pill-row" data-source="primary">
+          <span class="pill-row-logo" id="pill-row-logo-primary" hidden></span>
+          <div class="pill-metrics">
+            <div class="pill-metric">
+              <span class="pill-metric-value" id="five-hour-compact">—</span>
+              <span class="pill-metric-label" id="five-hour-label">5h</span>
+            </div>
+            <div class="pill-metric">
+              <span class="pill-metric-value" id="seven-day-compact">—</span>
+              <span class="pill-metric-label" id="seven-day-label">7d</span>
+            </div>
+          </div>
         </div>
-        <div class="pill-metric">
-          <span class="pill-metric-value" id="seven-day-compact">—</span>
-          <span class="pill-metric-label" id="seven-day-label">7d</span>
+        <div class="pill-row" data-source="secondary" hidden id="pill-row-secondary">
+          <span class="pill-row-logo" id="pill-row-logo-secondary"></span>
+          <div class="pill-metrics">
+            <div class="pill-metric">
+              <span class="pill-metric-value" id="five-hour-compact-2">—</span>
+              <span class="pill-metric-label" id="five-hour-label-2">5h</span>
+            </div>
+            <div class="pill-metric">
+              <span class="pill-metric-value" id="seven-day-compact-2">—</span>
+              <span class="pill-metric-label" id="seven-day-label-2">7d</span>
+            </div>
+          </div>
         </div>
       </div>
       <div class="pill-divider" id="pill-divider" hidden></div>
