@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { test, describe, before, after } from 'node:test';
+import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -17,24 +18,24 @@ describe('loadCodexRateLimits', () => {
 	let tmpHome: string;
 	const ORIG_HOME = process.env.CODEX_HOME;
 
-	beforeAll(() => {
+	before(() => {
 		tmpHome = mkdtempSync(path.join(tmpdir(), 'codex-test-'));
 		mkdirSync(path.join(tmpHome, 'sessions', '2026', '04', '30'), { recursive: true });
 		process.env.CODEX_HOME = tmpHome;
 	});
 
-	afterAll(() => {
+	after(() => {
 		if (ORIG_HOME === undefined) delete process.env.CODEX_HOME;
 		else process.env.CODEX_HOME = ORIG_HOME;
 		rmSync(tmpHome, { recursive: true, force: true });
 	});
 
-	it('returns null when no sessions exist', async () => {
+	test('returns null when no sessions exist', async () => {
 		const result = await loadCodexRateLimits();
-		expect(result).toBeNull();
+		assert.strictEqual(result, null);
 	});
 
-	it('extracts the latest rate_limits entry from the most recent session', async () => {
+	test('extracts the latest rate_limits entry from the most recent session', async () => {
 		const dir = path.join(tmpHome, 'sessions', '2026', '04', '30');
 		const event = (usedPrimary: number, ts: string) => JSON.stringify({
 			timestamp: ts,
@@ -63,17 +64,17 @@ describe('loadCodexRateLimits', () => {
 		], 2000);
 
 		const result = await loadCodexRateLimits();
-		expect(result).not.toBeNull();
-		expect(result!.planType).toBe('plus');
-		expect(result!.primary).not.toBeNull();
-		expect(result!.primary!.utilization).toBe(38.0);
-		expect(result!.primary!.windowMinutes).toBe(300);
-		expect(result!.primary!.resetsAt).toBe(new Date(1777521443 * 1000).toISOString());
-		expect(result!.secondary!.utilization).toBe(8.0);
-		expect(result!.snapshotAt).toBe('2026-04-30T01:40:00.000Z');
+		assert.notStrictEqual(result, null);
+		assert.strictEqual(result!.planType, 'plus');
+		assert.notStrictEqual(result!.primary, null);
+		assert.strictEqual(result!.primary!.utilization, 38.0);
+		assert.strictEqual(result!.primary!.windowMinutes, 300);
+		assert.strictEqual(result!.primary!.resetsAt, new Date(1777521443 * 1000).toISOString());
+		assert.strictEqual(result!.secondary!.utilization, 8.0);
+		assert.strictEqual(result!.snapshotAt, '2026-04-30T01:40:00.000Z');
 	});
 
-	it('handles missing rate_limits gracefully', async () => {
+	test('handles missing rate_limits gracefully', async () => {
 		const dir = path.join(tmpHome, 'sessions', '2026', '04', '30');
 		makeSession(dir, 'rollout-empty.jsonl', [
 			JSON.stringify({ timestamp: '2026-04-30T02:00:00.000Z', type: 'session_meta', payload: { cwd: '/tmp' } }),
@@ -81,11 +82,11 @@ describe('loadCodexRateLimits', () => {
 
 		const result = await loadCodexRateLimits();
 		// Falls back to whichever session DID have rate_limits — the previous "rollout-new"
-		expect(result).not.toBeNull();
-		expect(result!.snapshotAt).toBe('2026-04-30T01:40:00.000Z');
+		assert.notStrictEqual(result, null);
+		assert.strictEqual(result!.snapshotAt, '2026-04-30T01:40:00.000Z');
 	});
 
-	it('handles plan_type null (API-key auth)', async () => {
+	test('handles plan_type null (API-key auth)', async () => {
 		const dir = path.join(tmpHome, 'sessions', '2026', '04', '30');
 		makeSession(dir, 'rollout-apikey.jsonl', [JSON.stringify({
 			timestamp: '2026-04-30T03:00:00.000Z',
@@ -97,9 +98,9 @@ describe('loadCodexRateLimits', () => {
 		})], 4000);
 
 		const result = await loadCodexRateLimits();
-		expect(result).not.toBeNull();
-		expect(result!.planType).toBeNull();
-		expect(result!.primary).toBeNull();
-		expect(result!.secondary).toBeNull();
+		assert.notStrictEqual(result, null);
+		assert.strictEqual(result!.planType, null);
+		assert.strictEqual(result!.primary, null);
+		assert.strictEqual(result!.secondary, null);
 	});
 });
