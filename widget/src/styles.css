@@ -966,6 +966,9 @@ body {
 .source-toggle-row.disabled {
   opacity: 0.5;
 }
+.source-toggle-row.disabled .source-toggle-switch {
+  pointer-events: none;
+}
 .source-toggle-logo {
   width: 18px;
   height: 18px;
@@ -1015,7 +1018,10 @@ body {
   height: 14px;
   left: 2px;
   top: 2px;
-  background: white;
+  /* Use the foreground color so the thumb stays visible against the
+     slider track in both themes — hardcoded white was near-invisible
+     against the light-theme track. */
+  background: var(--text-primary);
   border-radius: 50%;
   transition: transform 0.15s;
 }
