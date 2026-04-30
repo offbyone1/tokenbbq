@@ -16,8 +16,8 @@
   --green-glow: rgba(34, 197, 94, 0.2);
   --orange: #E87B35;
   --orange-glow: rgba(232, 123, 53, 0.2);
-  --red: #ef4444;
-  --red-glow: rgba(239, 68, 68, 0.2);
+  --red: #e87575;
+  --red-glow: rgba(232, 117, 117, 0.18);
 }
 
 .theme-light {
@@ -36,8 +36,8 @@
   --green-glow: rgba(22, 163, 74, 0.12);
   --orange: #d06820;
   --orange-glow: rgba(208, 104, 32, 0.12);
-  --red: #dc2626;
-  --red-glow: rgba(220, 38, 38, 0.12);
+  --red: #c95a5a;
+  --red-glow: rgba(201, 90, 90, 0.1);
 }
 
 @font-face {
