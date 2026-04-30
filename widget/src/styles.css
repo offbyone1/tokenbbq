@@ -238,10 +238,20 @@ body {
 }
 
 /* In dual-mode the pill is taller so the standalone divider spans
-   both metric rows. Otherwise dual mode is identical to single — same
-   chip widths, same divider, same right-side layout. */
+   both metric rows. */
 .pill.dual-mode .pill-divider {
   height: 60px;
+}
+
+/* In dual-mode all four chips render at the same width by letting
+   pill-metrics fill the row and each chip take equal flex share.
+   Single-mode is untouched — chips stay natural width there. */
+.pill.dual-mode .pill-row .pill-metrics {
+  flex: 1;
+}
+.pill.dual-mode .pill-row .pill-metric {
+  flex: 1;
+  justify-content: center;
 }
 
 /* === EXPANDED PANEL === */
