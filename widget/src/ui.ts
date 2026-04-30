@@ -3,10 +3,10 @@ import type { ClaudeUsageResponse, LocalUsageSummary, ViewState } from "./types"
 import { resolveMode, type SourceMode, type SourceToggleState } from "./source-toggle";
 
 const COMPACT_SIZE_SINGLE = { width: 320, height: 64 };
-// 102 not 100: WebView2 on Windows occasionally reports 1px less than
-// the requested logical size, which clips the bottom border of the
-// dual-mode second row. The 2px buffer absorbs that.
-const COMPACT_SIZE_DUAL = { width: 320, height: 102 };
+// Pill is 104px in dual-mode, plus 12px combined vertical margin =
+// 116px. WebView2 on Windows occasionally reports 1px short, so we
+// add 2px buffer.
+const COMPACT_SIZE_DUAL = { width: 320, height: 118 };
 
 function compactSizeForMode(mode: SourceMode): { width: number; height: number } {
   return mode === 'both' ? COMPACT_SIZE_DUAL : COMPACT_SIZE_SINGLE;
@@ -132,21 +132,18 @@ export function renderCompact(
   const fiveHourLabel = document.getElementById("five-hour-label")!;
   const sevenDayLabel = document.getElementById("seven-day-label")!;
 
-  // Helper: reset to single-row layout (hide secondary row + logos,
-  // clear stale logo SVG so a future refactor can't leak ghost content).
+  // Helper: reset to single-row layout (hide secondary row).
+  // Logos are intentionally NEVER shown in either row — the user's UX
+  // call. We keep the slots in the HTML so a future redesign can place
+  // brand marks elsewhere (e.g. as a footnote) without re-wiring.
   function setSingleRowVisibility(): void {
     document.getElementById('pill-row-secondary')!.setAttribute('hidden', '');
-    document.getElementById('pill-row-logo-primary')!.setAttribute('hidden', '');
-    document.getElementById('pill-row-logo-primary')!.innerHTML = '';
-    document.getElementById('pill-row-logo-secondary')!.innerHTML = '';
   }
 
   if (mode === 'both' && codex) {
-    // Show secondary row + both logos
+    // Dual-mode: just show the second row. Both logos stay hidden by
+    // default (set in HTML); we don't populate them here.
     document.getElementById('pill-row-secondary')!.removeAttribute('hidden');
-    document.getElementById('pill-row-logo-primary')!.removeAttribute('hidden');
-    document.getElementById('pill-row-logo-primary')!.innerHTML = claudeBadgeSvg;
-    document.getElementById('pill-row-logo-secondary')!.innerHTML = codexBadgeSvg;
 
     // Primary row = Claude
     const fhPctC = usage.five_hour?.utilization ?? 0;

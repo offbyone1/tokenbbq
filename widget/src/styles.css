@@ -113,7 +113,11 @@ body {
 .pill:active { transform: scale(0.99); }
 
 .pill.dual-mode {
-  height: 88px;  /* Two rows + padding. Window will be 100px (88 + 12 margin). */
+  /* Two rows of single-mode-sized metric chips. Single pill is 52px;
+     dual is roughly two of those minus shared chrome — empirically
+     104px gives both rows the same chip size as single without
+     clipping the divider on the right. */
+  height: 104px;
 }
 
 .pill.hidden-pill {
@@ -234,16 +238,14 @@ body {
   display: none;
 }
 
-/* In dual-mode, tighten metric typography slightly so two rows fit
-   without ballooning the pill. */
-.pill.dual-mode .pill-metric-value {
-  font-size: 12px;
-}
-.pill.dual-mode .pill-metric-label {
-  font-size: 9px;
-}
-.pill.dual-mode .pill-metric {
-  padding: 4px 8px;
+/* In dual-mode the pill grows tall enough for two identical rows.
+   The divider needs to stretch over both rows so it stays a clean
+   vertical separator like in single mode. */
+.pill.dual-mode .pill-divider {
+  height: auto;
+  align-self: stretch;
+  margin-top: 8px;
+  margin-bottom: 8px;
 }
 
 /* === EXPANDED PANEL === */
