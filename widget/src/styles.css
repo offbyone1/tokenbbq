@@ -113,10 +113,10 @@ body {
 .pill:active { transform: scale(0.99); }
 
 .pill.dual-mode {
-  /* Two rows of single-mode chips. 120px pill (window 134) leaves a
-     comfortable vertical margin so chip borders aren't flush with
-     the pill edge. */
-  height: 120px;
+  /* Two rows of ~30px chips + 4px gap = 64. Pill 84 leaves 10px
+     vertical breathing room (5 above, 5 below) — enough not to feel
+     cramped, not so much that the rows float in empty space. */
+  height: 84px;
 }
 
 .pill.hidden-pill {
@@ -242,7 +242,11 @@ body {
    was being ignored under the parent's align-items: center. The 70px
    gives a clean separator that visually spans both metric rows. */
 .pill.dual-mode .pill-divider {
-  height: 84px;
+  /* Match the new shorter pill — 60 leaves 12px above and below the
+     line. Background bumped to a more visible mid-grey because the
+     base var(--border) blends almost invisibly into var(--card). */
+  height: 60px;
+  background: var(--text-tertiary);
 }
 
 /* Dual-mode only: rate-limit chips fixed at the widest realistic
