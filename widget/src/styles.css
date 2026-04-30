@@ -248,14 +248,15 @@ body {
    left of each pill-row, in the brand color of that row's source.
    Claude Code = #c15f3c (orange), Codex = #74aa9c (teal). The pill-row
    gets a small left padding to make room — chips shrink ~4px each but
-   the right side (divider, today, grip) is unaffected. The bookmark is
-   absolutely positioned and limited in height to its own row, so it's
-   visually tied to the row (not the column) without ambiguity. */
+   the right side (divider, today, grip) is unaffected. The marker is a
+   ::before pseudo-element so we don't have to fight the [hidden]
+   attribute on the legacy .pill-row-logo span. Height is limited to
+   one row, so it's visually tied to the row, not the column. */
 .pill.dual-mode .pill-row {
   padding-left: 10px;
 }
-.pill.dual-mode .pill-row-logo {
-  display: block;
+.pill.dual-mode .pill-row::before {
+  content: '';
   position: absolute;
   left: 0;
   top: 50%;
@@ -263,12 +264,11 @@ body {
   width: 3px;
   height: 24px;
   border-radius: 1.5px;
-  flex-shrink: 0;
 }
-.pill.dual-mode .pill-row[data-source="primary"] .pill-row-logo {
+.pill.dual-mode .pill-row[data-source="primary"]::before {
   background: #c15f3c;
 }
-.pill.dual-mode .pill-row[data-source="secondary"] .pill-row-logo {
+.pill.dual-mode .pill-row[data-source="secondary"]::before {
   background: #74aa9c;
 }
 
