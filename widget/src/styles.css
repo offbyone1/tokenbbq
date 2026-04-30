@@ -237,34 +237,31 @@ body {
   display: none;
 }
 
-/* In dual-mode the pill grows tall enough for two identical rows.
-   Use an explicit height instead of align-self: stretch — the latter
-   was being ignored under the parent's align-items: center. The 70px
-   gives a clean separator that visually spans both metric rows. */
-/* In dual-mode the standalone .pill-divider element kept rendering
-   at zero visible width as a flex item — confirmed via an absolute-
-   positioned diagnostic that DID render. Replace it with a
-   border-left on the today zone, which is a paint property the flex
-   algorithm can't eat. */
+/* In dual-mode the standalone .pill-divider element kept rendering at
+   zero visible width as a flex item — confirmed via diagnostic.
+   Replace with a border-left on the today zone (a paint property the
+   flex algorithm can't eat). Match single-mode divider's style + 17px
+   total horizontal footprint so today/grip stay at single's x-position. */
 .pill.dual-mode .pill-divider {
   display: none;
 }
 .pill.dual-mode .pill-metrics-local {
-  border-left: 2px solid var(--text-secondary);
+  border-left: 1px solid var(--border);
   margin-left: 8px;
-  padding-left: 14px;
+  padding-left: 8px;
+  min-height: 60px;
 }
 
-/* Dual-mode only: rate-limit chips fixed at the widest realistic
-   content size ("100% 7d" ≈ 76px). Belt-and-suspenders here because
-   flex shrinking has bitten this layout twice already — flex basis +
-   min + max + width + box-sizing leaves no path for the chip to drift.
-   Single-mode keeps natural sizing. */
+/* Dual-mode chips uniform at 70px so both rows render identically and
+   the pill-rows allocation matches single-mode chip footprint —
+   divider/today/grip line up at the same x as single. 70 fits typical
+   content with 6px buffer; rare "100%+long-label" content may clip 1-
+   2px which is acceptable. */
 .pill.dual-mode .pill-row .pill-metric {
-  flex: 0 0 76px;
-  width: 76px;
-  min-width: 76px;
-  max-width: 76px;
+  flex: 0 0 70px;
+  width: 70px;
+  min-width: 70px;
+  max-width: 70px;
   justify-content: center;
   box-sizing: border-box;
 }
