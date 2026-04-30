@@ -1,6 +1,6 @@
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import type { ClaudeUsageResponse, LocalUsageSummary, ViewState } from "./types";
-import type { SourceToggleState } from "./source-toggle";
+import { resolveMode, type SourceToggleState } from "./source-toggle";
 
 const COMPACT_SIZE = { width: 320, height: 64 };
 const EXPANDED_WIDTH = 320;
@@ -104,26 +104,43 @@ function toggleRowHtml(
     </div>`;
 }
 
-export function renderCompact(usage: ClaudeUsageResponse): void {
+export function renderCompact(
+  usage: ClaudeUsageResponse,
+  local: LocalUsageSummary | null,
+  toggleState: SourceToggleState,
+): void {
+  const codex = local?.codexUsage ?? null;
+  const hasClaude = !!(usage.five_hour || usage.seven_day);
+  const hasCodex = codex !== null && codex.planType !== null
+    && (codex.primary !== null || codex.secondary !== null);
+  const mode = resolveMode(toggleState, hasClaude, hasCodex);
+
   const fiveHour = document.getElementById("five-hour-compact")!;
   const sevenDay = document.getElementById("seven-day-compact")!;
   const fiveHourLabel = document.getElementById("five-hour-label")!;
   const sevenDayLabel = document.getElementById("seven-day-label")!;
 
+  if (mode === 'codex' && codex) {
+    const fhPct = codex.primary?.utilization ?? 0;
+    const sdPct = codex.secondary?.utilization ?? 0;
+    fiveHour.textContent = `${Math.round(fhPct)}%`;
+    fiveHour.style.color = utilizationColor(fhPct);
+    sevenDay.textContent = `${Math.round(sdPct)}%`;
+    sevenDay.style.color = utilizationColor(sdPct);
+    fiveHourLabel.textContent = formatHoursCompact(codex.primary?.resetsAt ?? null) || "5h";
+    sevenDayLabel.textContent = formatDaysCompact(codex.secondary?.resetsAt ?? null) || "7d";
+    return;
+  }
+
+  // Default + 'both' (Task 7 will handle 'both' specifically): claude single layout.
   const fhPct = usage.five_hour?.utilization ?? 0;
   const sdPct = usage.seven_day?.utilization ?? 0;
-
   fiveHour.textContent = `${Math.round(fhPct)}%`;
   fiveHour.style.color = utilizationColor(fhPct);
   sevenDay.textContent = `${Math.round(sdPct)}%`;
   sevenDay.style.color = utilizationColor(sdPct);
-
-  // Time-until-reset replaces the static window-length labels. Fall back to
-  // the original "5h"/"7d" strings if resets_at is missing (initial load).
-  const fhRemaining = formatHoursCompact(usage.five_hour?.resets_at ?? null);
-  const sdRemaining = formatDaysCompact(usage.seven_day?.resets_at ?? null);
-  fiveHourLabel.textContent = fhRemaining || "5h";
-  sevenDayLabel.textContent = sdRemaining || "7d";
+  fiveHourLabel.textContent = formatHoursCompact(usage.five_hour?.resets_at ?? null) || "5h";
+  sevenDayLabel.textContent = formatDaysCompact(usage.seven_day?.resets_at ?? null) || "7d";
 }
 
 /// Render the local-AI-tools half of the compact pill. Pass null to hide the

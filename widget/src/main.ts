@@ -24,7 +24,7 @@ async function fetchUsage(): Promise<void> {
     const json = JSON.stringify(usage);
     if (json === lastUsageJson) return;
     lastUsageJson = json;
-    renderCompact(usage);
+    renderCompact(usage, lastLocal, toggleState);
     renderExpanded(usage, lastLocal, toggleState);
   } catch (e) {
     renderError(String(e));
@@ -288,11 +288,10 @@ function setupEventListeners(): void {
     else if (target.id === "toggle-codex") toggleState.codex = target.checked;
     else return;
     saveToggleState(toggleState);
-    // Re-render expanded so the toggles reflect the persisted state
-    // even after a refresh. Pill update comes in Task 6.
     if (lastUsageJson) {
       try {
         const usage = JSON.parse(lastUsageJson) as ClaudeUsageResponse;
+        renderCompact(usage, lastLocal, toggleState);
         renderExpanded(usage, lastLocal, toggleState);
       } catch {}
     }
