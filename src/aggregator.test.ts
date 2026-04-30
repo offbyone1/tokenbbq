@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { aggregateByProject } from './aggregator.js';
-import type { UnifiedTokenEvent } from './types.js';
+import { aggregateByProject, buildDashboardData } from './aggregator.js';
+import type { CodexRateLimits, UnifiedTokenEvent } from './types.js';
 
 function ev(over: Partial<UnifiedTokenEvent> = {}): UnifiedTokenEvent {
   return {
@@ -91,5 +91,23 @@ describe('aggregateByProject', () => {
     const cx = p.perSource.find(s => s.source === 'codex');
     assert.equal(cc?.costUSD, 4);
     assert.equal(cx?.costUSD, 0.75);
+  });
+});
+
+describe('buildDashboardData', () => {
+  test('passes through codexRateLimits unchanged when provided', () => {
+    const limits: CodexRateLimits = {
+      planType: 'plus',
+      primary: { utilization: 38, windowMinutes: 300, resetsAt: '2026-04-30T05:57:23.000Z' },
+      secondary: { utilization: 11, windowMinutes: 10080, resetsAt: '2026-05-06T09:17:38.000Z' },
+      snapshotAt: '2026-04-30T01:38:47.383Z',
+    };
+    const out = buildDashboardData([], limits);
+    assert.equal(out.codexRateLimits, limits);
+  });
+
+  test('defaults codexRateLimits to null when omitted', () => {
+    const out = buildDashboardData([]);
+    assert.equal(out.codexRateLimits, null);
   });
 });
