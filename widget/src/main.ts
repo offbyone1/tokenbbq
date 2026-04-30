@@ -40,11 +40,14 @@ async function fetchLocalUsage(): Promise<void> {
     const local = await invoke<LocalUsageSummary>("fetch_local_usage");
     lastLocal = local;
     renderLocalCompact(local);
-    // Re-render the expanded panel only if it's currently mounted; the
-    // claude.ai poll will pick up `lastLocal` next time it fires anyway.
+    // Re-render pill + expanded if we already have claude data. Otherwise
+    // the pill would show stale Codex data (or none) for up to 60s while
+    // the claude.ai poll catches up — visible especially right after the
+    // user starts Codex with the Codex toggle already on.
     if (lastUsageJson) {
       try {
         const usage = JSON.parse(lastUsageJson) as ClaudeUsageResponse;
+        renderCompact(usage, local, toggleState);
         renderExpanded(usage, local, toggleState);
       } catch {}
     }
