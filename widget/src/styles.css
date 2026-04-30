@@ -241,19 +241,18 @@ body {
    Use an explicit height instead of align-self: stretch — the latter
    was being ignored under the parent's align-items: center. The 70px
    gives a clean separator that visually spans both metric rows. */
-.pill.dual-mode #pill-divider {
-  /* Maximum-priority diagnostic: position:absolute with fixed coords
-     so flex layout can't hide it. If this red rectangle in the
-     top-left corner doesn't appear, the element itself isn't being
-     unhidden — likely the [hidden] HTML attribute is sticking. */
-  display: block !important;
-  position: absolute !important;
-  top: 4px !important;
-  left: 4px !important;
-  width: 12px !important;
-  height: 60px !important;
-  background: red !important;
-  z-index: 9999 !important;
+/* In dual-mode the standalone .pill-divider element kept rendering
+   at zero visible width as a flex item — confirmed via an absolute-
+   positioned diagnostic that DID render. Replace it with a
+   border-left on the today zone, which is a paint property the flex
+   algorithm can't eat. */
+.pill.dual-mode .pill-divider {
+  display: none;
+}
+.pill.dual-mode .pill-metrics-local {
+  border-left: 2px solid var(--text-secondary);
+  margin-left: 8px;
+  padding-left: 14px;
 }
 
 /* Dual-mode only: rate-limit chips fixed at the widest realistic
