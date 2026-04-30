@@ -242,13 +242,13 @@ body {
    was being ignored under the parent's align-items: center. The 70px
    gives a clean separator that visually spans both metric rows. */
 .pill.dual-mode .pill-divider {
-  /* Match the new shorter pill — 60 leaves 12px above and below the
-     line. 2px wide + --text-secondary (#94a3b8) so it's actually
-     visible — the base 1px var(--border) was disappearing into the
-     dark pill background. */
-  height: 60px;
-  width: 2px;
-  background: var(--text-secondary);
+  /* Debug-strength visibility: orange brand color, 4px wide, forced
+     display block. If THIS isn't visible the element is being hidden
+     somewhere I can't see, not a styling issue. */
+  display: block !important;
+  height: 60px !important;
+  width: 4px !important;
+  background: var(--accent) !important;
 }
 
 /* Dual-mode only: rate-limit chips fixed at the widest realistic
