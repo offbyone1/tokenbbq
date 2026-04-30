@@ -51,6 +51,9 @@ pub struct CodexWindowUsage {
     pub resets_at: Option<String>,
 }
 
+/// Live Codex rate-limit snapshot received from the sidecar. Mirrors
+/// the TS `CodexRateLimits` interface in `src/types.ts`. The widget
+/// renders these values in the pill when the Codex toggle is on.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexUsage {

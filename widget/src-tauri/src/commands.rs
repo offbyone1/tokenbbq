@@ -383,10 +383,17 @@ pub async fn fetch_local_usage() -> Result<LocalUsageSummary, String> {
         _ => Vec::new(),
     };
 
+    // Schema-drift safety: log on deserialization failure rather than
+    // silently swallowing — otherwise a sidecar shape change would
+    // produce a `null` Codex toggle in the widget with no clue why.
     let codex_usage: Option<CodexUsage> = raw
         .get("codexRateLimits")
         .and_then(|v| if v.is_null() { None } else { Some(v.clone()) })
-        .and_then(|v| serde_json::from_value::<CodexUsage>(v).ok());
+        .and_then(|v| {
+            serde_json::from_value::<CodexUsage>(v)
+                .map_err(|e| eprintln!("tokenbbq-widget: codexRateLimits deserialize failed: {e}"))
+                .ok()
+        });
 
     Ok(LocalUsageSummary {
         generated,
