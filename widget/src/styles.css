@@ -243,10 +243,12 @@ body {
    gives a clean separator that visually spans both metric rows. */
 .pill.dual-mode .pill-divider {
   /* Match the new shorter pill — 60 leaves 12px above and below the
-     line. Background bumped to a more visible mid-grey because the
-     base var(--border) blends almost invisibly into var(--card). */
+     line. 2px wide + --text-secondary (#94a3b8) so it's actually
+     visible — the base 1px var(--border) was disappearing into the
+     dark pill background. */
   height: 60px;
-  background: var(--text-tertiary);
+  width: 2px;
+  background: var(--text-secondary);
 }
 
 /* Dual-mode only: rate-limit chips fixed at the widest realistic
