@@ -134,7 +134,7 @@ body {
   gap: 3px;
   padding: 4px 2px;
   cursor: grab;
-  opacity: 0.25;
+  opacity: 0.4;
   transition: opacity 0.2s;
   flex-shrink: 0;
   margin-left: auto;
