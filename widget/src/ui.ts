@@ -62,25 +62,6 @@ export function utilizationColor(pct: number): string {
   return `var(--${colorTier(pct)})`;
 }
 
-function formatTimeUntil(isoString: string | null): string {
-  if (!isoString) return "";
-  const diffMs = new Date(isoString).getTime() - Date.now();
-  if (diffMs <= 0) return "Resetting...";
-  const hours = Math.floor(diffMs / 3600000);
-  const minutes = Math.floor((diffMs % 3600000) / 60000);
-  if (hours >= 24) {
-    return `Resets in ${Math.floor(hours / 24)}d ${hours % 24}h`;
-  }
-  return `Resets in ${hours}h ${minutes}m`;
-}
-
-function formatResetDate(isoString: string | null): string {
-  if (!isoString) return "";
-  const diffMs = new Date(isoString).getTime() - Date.now();
-  if (diffMs < 86400000) return formatTimeUntil(isoString);
-  return `Resets ${new Date(isoString).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-}
-
 // Compact pill labels: just the unit-of-time-until-reset, no prose. Returns
 // "" when we don't have a timestamp yet so callers can fall back to a static
 // placeholder instead of rendering an empty label.
@@ -99,8 +80,6 @@ function formatDaysCompact(isoString: string | null): string {
   if (diffMs <= 0) return "0d";
   return `${Math.ceil(diffMs / 86400000)}d`;
 }
-
-const clockSvg = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8a6.5 6.5 0 1 1 1 3.5"/><path d="M1 5v3.5H4.5"/></svg>`;
 
 // Placeholder shapes — replaced with real brand SVGs in Task 8.
 const claudeBadgeSvg = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>`;
@@ -122,30 +101,6 @@ function toggleRowHtml(
         <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
         <span class="source-toggle-slider"></span>
       </label>
-    </div>`;
-}
-
-function usageRowHtml(
-  name: string,
-  usage: { utilization: number; resets_at: string | null } | null,
-): string {
-  if (!usage) return "";
-  const pct = usage.utilization;
-  const tier = colorTier(pct);
-  const color = `var(--${tier})`;
-  const glow = `var(--${tier}-glow)`;
-  const resetText = name === "5-Hour Window"
-    ? formatTimeUntil(usage.resets_at)
-    : formatResetDate(usage.resets_at);
-
-  return `
-    <div class="usage-row">
-      <div class="usage-row-header">
-        <span class="usage-row-name"><span class="dot" style="background:${color};box-shadow:0 0 4px ${glow}"></span>${name}</span>
-        <span class="usage-row-value" style="color:${color}">${Math.round(pct)}%</span>
-      </div>
-      <div class="progress-track"><div class="progress-fill ${tier}" style="width:${pct}%"></div></div>
-      ${resetText ? `<div class="usage-row-meta"><span class="usage-row-reset">${clockSvg}${resetText}</span></div>` : ""}
     </div>`;
 }
 
@@ -207,8 +162,6 @@ export function renderExpanded(
   html += toggleRowHtml('toggle-claude', 'Claude Code', claudeBadgeSvg, toggleState.claude, false);
   html += toggleRowHtml('toggle-codex', 'Codex', codexBadgeSvg, toggleState.codex && codexAvailable, !codexAvailable, codexHint);
   html += `</div>`;
-  html += usageRowHtml("5-Hour Window", usage.five_hour);
-  html += usageRowHtml("7-Day Window", usage.seven_day);
 
   if (usage.extra_usage && usage.extra_usage.is_enabled) {
     const ex = usage.extra_usage;
