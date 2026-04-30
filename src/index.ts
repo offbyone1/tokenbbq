@@ -49,6 +49,29 @@ ${pc.cyan('Supported Tools:')}
 `);
 }
 
+// Bun-compiled binaries on Windows don't reliably flush stdout when the
+// process exits naturally — when spawned as a child of the Tauri widget (a
+// GUI process with no TTY), the JSON payload can be left in the runtime
+// buffer and never reach the parent's `output()`. Explicitly drain the
+// stdout buffer via the write callback, then exit, so the bytes actually
+// land in the parent's pipe.
+function writeJsonAndExit(data: unknown): Promise<void> {
+	return new Promise((resolve) => {
+		const payload = JSON.stringify(data, null, 2);
+		const flushed = process.stdout.write(payload, () => {
+			resolve();
+			process.exit(0);
+		});
+		if (!flushed) {
+			// Stdout buffer is full; resolve once it drains. Belt + braces.
+			process.stdout.once('drain', () => {
+				resolve();
+				process.exit(0);
+			});
+		}
+	});
+}
+
 // Only honour an explicit TOKENBBQ_LOGO_PATH. Without it, the dashboard
 // falls back to its inline SVG flame/coin mark — no need to hunt for a
 // PNG in the user's Downloads folder.
@@ -95,7 +118,7 @@ async function main(): Promise<void> {
 		// In JSON mode (incl. `scan`) emit a valid empty DashboardData rather than
 		// returning silently — embedders can then unconditionally JSON.parse stdout.
 		if (json) {
-			process.stdout.write(JSON.stringify(buildDashboardData([]), null, 2));
+			await writeJsonAndExit(buildDashboardData([]));
 			return;
 		}
 		console.error(pc.yellow('\n  No usage data found.'));
@@ -111,7 +134,7 @@ async function main(): Promise<void> {
 	const data = buildDashboardData(store.events);
 
 	if (json) {
-		process.stdout.write(JSON.stringify(data, null, 2));
+		await writeJsonAndExit(data);
 		return;
 	}
 
