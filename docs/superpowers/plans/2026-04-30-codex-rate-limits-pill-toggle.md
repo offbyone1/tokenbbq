@@ -40,6 +40,8 @@ This file is committed so tests run deterministically.
 
 ## Phase 1 — Backend: Codex Rate Limit Extraction
 
+> **Test framework:** This project uses `node:test` (Node's native runner), not vitest. `npm test` runs `node --test --import tsx "src/**/*.test.ts"`. New tests should follow the pattern in `src/store.test.ts` / `src/aggregator.test.ts`: `import { test, describe, before, after } from 'node:test'; import assert from 'node:assert/strict';`. Use `assert.strictEqual` / `assert.notStrictEqual` instead of vitest's `expect().toBe()` / `expect().not.toBeNull()`.
+
 ### Task 1: Type definitions + loader function
 
 **Files:**

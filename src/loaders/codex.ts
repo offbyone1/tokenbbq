@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -201,7 +201,6 @@ export async function loadCodexRateLimits(): Promise<CodexRateLimits | null> {
 	const files = await glob('**/*.jsonl', { cwd: sessionsDir, absolute: true });
 	if (files.length === 0) return null;
 
-	const { stat } = await import('node:fs/promises');
 	const withMtime = await Promise.all(files.map(async (file) => {
 		const s = await stat(file);
 		return { path: file, mtimeMs: s.mtimeMs };

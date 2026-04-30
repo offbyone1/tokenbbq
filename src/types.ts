@@ -175,32 +175,38 @@ export const SOURCE_COLORS: Record<Source, string> = {
 	pi: '#8B5CF6',
 };
 
-/// Snapshot of Codex CLI rate-limit state read from the most recent
-/// session JSONL. Codex emits this structure on every `token_count`
-/// event; we keep only the latest one. Unix-seconds reset times are
-/// converted to ISO strings at extraction time so consumers can use the
-/// same Date(...) parsing as Claude's WindowUsage.
+/**
+ * Snapshot of Codex CLI rate-limit state read from the most recent
+ * session JSONL. Codex emits this structure on every `token_count`
+ * event; we keep only the latest one. Unix-seconds reset times are
+ * converted to ISO strings at extraction time so consumers can use the
+ * same Date(...) parsing as Claude's WindowUsage.
+ */
 export interface CodexWindowUsage {
-	/// 0-100, matches Claude's WindowUsage.utilization semantics.
+	/** 0-100, matches Claude's WindowUsage.utilization semantics. */
 	utilization: number;
-	/// Window length in minutes (300 for 5h, 10080 for 7d).
+	/** Window length in minutes (300 for 5h, 10080 for 7d). */
 	windowMinutes: number;
-	/// ISO 8601 timestamp; null only if Codex emitted a malformed entry.
+	/** ISO 8601 timestamp; null only if Codex emitted a malformed entry. */
 	resetsAt: string | null;
 }
 
 export interface CodexRateLimits {
-	/// "plus" / "pro" / "team" / "enterprise" / "edu". Null when the
-	/// user authenticates via OPENAI_API_KEY (pay-as-you-go has no plan
-	/// limits — UI should treat null as "Codex toggle unavailable").
+	/**
+	 * "plus" / "pro" / "team" / "enterprise" / "edu". Null when the
+	 * user authenticates via OPENAI_API_KEY (pay-as-you-go has no plan
+	 * limits — UI should treat null as "Codex toggle unavailable").
+	 */
 	planType: string | null;
-	/// 5-hour rolling window. Null only if missing in the source event.
+	/** 5-hour rolling window. Null only if missing in the source event. */
 	primary: CodexWindowUsage | null;
-	/// 7-day rolling window. Null only if missing in the source event.
+	/** 7-day rolling window. Null only if missing in the source event. */
 	secondary: CodexWindowUsage | null;
-	/// ISO timestamp of the source `token_count` event — i.e. the
-	/// moment of the user's last Codex API call. The widget renders
-	/// these numbers without an "as of" stamp by user request, but we
-	/// expose this for future use / debugging.
+	/**
+	 * ISO timestamp of the source `token_count` event — i.e. the
+	 * moment of the user's last Codex API call. The widget renders
+	 * these numbers without an "as of" stamp by user request, but we
+	 * expose this for future use / debugging.
+	 */
 	snapshotAt: string;
 }
