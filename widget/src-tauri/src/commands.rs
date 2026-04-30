@@ -203,12 +203,14 @@ pub async fn auto_detect_org(client: State<'_, reqwest::Client>, session_key: St
 ///   4. Release fallback: `<repo>/dist/index.js` (same path as step 2 but
 ///      reached only if the bundled exe is missing).
 fn resolve_tokenbbq_invocation() -> Result<(PathBuf, Vec<String>), String> {
+    let mut tried: Vec<String> = Vec::new();
+
     if let Ok(env_path) = std::env::var("TOKENBBQ_SIDECAR_PATH") {
         let p = PathBuf::from(&env_path);
-        if !p.exists() {
-            return Err(format!("TOKENBBQ_SIDECAR_PATH does not point to an existing file: {}", env_path));
+        if p.exists() {
+            return Ok(invocation_for(p));
         }
-        return Ok(invocation_for(p));
+        tried.push(format!("env TOKENBBQ_SIDECAR_PATH={} (missing)", env_path));
     }
 
     let dev_fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -222,26 +224,53 @@ fn resolve_tokenbbq_invocation() -> Result<(PathBuf, Vec<String>), String> {
         if dev_fallback.exists() {
             return Ok(invocation_for(dev_fallback.clone()));
         }
+        tried.push(format!("dev fallback {} (missing)", dev_fallback.display()));
     }
 
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            let bin_name = if cfg!(target_os = "windows") { "tokenbbq.exe" } else { "tokenbbq" };
-            let bundled = dir.join(bin_name);
-            if bundled.exists() {
-                return Ok(invocation_for(bundled));
+            // Tauri's externalBin install layout varies by bundler: NSIS
+            // typically strips the triple, but MSI / future versions may
+            // keep it, and some bundle modes drop the binary into a
+            // resources/ subdir. Try every plausible layout before giving up.
+            let candidates: Vec<PathBuf> = if cfg!(target_os = "windows") {
+                vec![
+                    dir.join("tokenbbq.exe"),
+                    dir.join("resources").join("tokenbbq.exe"),
+                    dir.join("binaries").join("tokenbbq.exe"),
+                    dir.join("tokenbbq-x86_64-pc-windows-msvc.exe"),
+                    dir.join("resources").join("tokenbbq-x86_64-pc-windows-msvc.exe"),
+                ]
+            } else if cfg!(target_os = "macos") {
+                vec![
+                    dir.join("tokenbbq"),
+                    dir.join("../Resources/tokenbbq"),
+                    dir.join("../Resources/_up_/tokenbbq"),
+                    dir.join("tokenbbq-aarch64-apple-darwin"),
+                    dir.join("tokenbbq-x86_64-apple-darwin"),
+                ]
+            } else {
+                vec![dir.join("tokenbbq")]
+            };
+
+            for c in &candidates {
+                if c.exists() {
+                    return Ok(invocation_for(c.clone()));
+                }
+                tried.push(format!("{} (missing)", c.display()));
             }
+        } else {
+            tried.push("current_exe has no parent".to_string());
         }
+    } else {
+        tried.push("current_exe failed".to_string());
     }
 
     if dev_fallback.exists() {
         return Ok(invocation_for(dev_fallback));
     }
 
-    Err(format!(
-        "TokenBBQ sidecar not found. Run `npm run build:sidecar` at the repo root, or set TOKENBBQ_SIDECAR_PATH explicitly. Looked for a bundled binary next to the widget exe and {}.",
-        dev_fallback.display()
-    ))
+    Err(format!("TokenBBQ sidecar not found. Tried: {}", tried.join(" | ")))
 }
 
 fn invocation_for(path: PathBuf) -> (PathBuf, Vec<String>) {
@@ -299,35 +328,52 @@ pub async fn open_full_dashboard() -> Result<(), String> {
 #[tauri::command]
 pub async fn fetch_local_usage() -> Result<LocalUsageSummary, String> {
     let (program, args) = resolve_tokenbbq_invocation()?;
+    let program_display = program.display().to_string();
 
-    // std::process::Command in spawn_blocking — keeps tokio dependencies minimal
-    // (no need for the `process` feature flag) and the scan is short-lived.
-    let output = tokio::task::spawn_blocking(move || {
+    // Hard 30-second timeout on the spawn so a hanging child process surfaces
+    // as a visible error instead of leaving the JS Promise pending forever.
+    // Bun-compiled binaries on Windows have been observed to hang during init
+    // when spawned from a GUI parent; the timeout means the user gets feedback
+    // either way.
+    let join_handle = tokio::task::spawn_blocking(move || {
         let mut cmd = std::process::Command::new(&program);
         cmd.args(&args)
-            // Explicitly null stdin — when the widget runs as a GUI process
-            // there is no inherited tty, and Bun-compiled binaries have been
-            // observed to hang during init on Windows when stdin is left as
-            // the default (inherit). Belt + suspenders for the bundled-binary
-            // codepath.
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         #[cfg(windows)]
         cmd.creation_flags(CREATE_NO_WINDOW);
         cmd.output()
-    })
-    .await
-    .map_err(|e| format!("Task error: {}", e))?
-    .map_err(|e| format!("Failed to spawn TokenBBQ: {}", e))?;
+    });
+
+    let output = match tokio::time::timeout(std::time::Duration::from_secs(30), join_handle).await {
+        Ok(Ok(Ok(out))) => out,
+        Ok(Ok(Err(e))) => return Err(format!("Failed to spawn TokenBBQ ({}): {}", program_display, e)),
+        Ok(Err(e)) => return Err(format!("Spawn task error: {}", e)),
+        Err(_) => return Err(format!(
+            "TokenBBQ scan timed out after 30s. Spawned: {}. Likely the bundled sidecar is hanging during init.",
+            program_display
+        )),
+    };
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let preview: String = stderr.chars().take(300).collect();
         return Err(format!(
-            "TokenBBQ scan exited {}: {}",
+            "TokenBBQ scan exited {}: {} (program: {})",
             output.status.code().unwrap_or(-1),
-            preview.trim()
+            preview.trim(),
+            program_display
+        ));
+    }
+
+    if output.stdout.is_empty() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let preview: String = stderr.chars().take(300).collect();
+        return Err(format!(
+            "TokenBBQ scan exited cleanly but produced no output. stderr: '{}'. program: {}",
+            preview.trim(),
+            program_display
         ));
     }
 
@@ -335,7 +381,10 @@ pub async fn fetch_local_usage() -> Result<LocalUsageSummary, String> {
     // every nested aggregation type from TokenBBQ. We only consume `generated`,
     // `daily`, and `dailyBySource`.
     let raw: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .map_err(|e| format!("Could not parse TokenBBQ output: {}", e))?;
+        .map_err(|e| {
+            let preview: String = String::from_utf8_lossy(&output.stdout).chars().take(200).collect();
+            format!("Could not parse TokenBBQ output: {}. First bytes: '{}'", e, preview)
+        })?;
 
     let generated = raw
         .get("generated")

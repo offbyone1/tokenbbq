@@ -47,11 +47,26 @@ async function fetchLocalUsage(): Promise<void> {
       } catch {}
     }
   } catch (e) {
-    // Sidecar unavailable / errored → degrade gracefully: hide the local zone,
-    // keep claude.ai data visible. Console-only so we don't drown the user.
+    // Surface the full error message in the expanded panel so users can see
+    // why local data is missing without needing DevTools (which prod builds
+    // don't expose). Production troubleshooting beats clean degradation here.
     console.warn("fetch_local_usage failed:", e);
     lastLocal = null;
     renderLocalCompact(null);
+    const container = document.getElementById("usage-bars");
+    if (container) {
+      const existing = container.querySelector(".local-error") as HTMLElement | null;
+      const msg = `Local AI tools unavailable.\n\n${String(e)}`;
+      if (existing) {
+        existing.textContent = msg;
+      } else {
+        const div = document.createElement("div");
+        div.className = "local-error";
+        div.style.cssText = "margin-top:10px;padding:8px 10px;border:1px solid var(--red);border-radius:6px;color:var(--red);font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-word;background:rgba(239,68,68,0.05)";
+        div.textContent = msg;
+        container.appendChild(div);
+      }
+    }
   }
 }
 
