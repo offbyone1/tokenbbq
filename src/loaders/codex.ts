@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { glob } from 'tinyglobby';
-import type { UnifiedTokenEvent } from '../types.js';
+import type { UnifiedTokenEvent, CodexRateLimits, CodexWindowUsage } from '../types.js';
 import { resolveProjectRoot } from '../project.js';
 
 const HOME = homedir();
@@ -171,4 +171,82 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 
 	events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 	return events;
+}
+
+function parseRateLimitWindow(raw: unknown): CodexWindowUsage | null {
+	if (!raw || typeof raw !== 'object') return null;
+	const r = raw as Record<string, unknown>;
+	const used = typeof r.used_percent === 'number' ? r.used_percent : null;
+	const windowMin = typeof r.window_minutes === 'number' ? r.window_minutes : null;
+	const resetsUnix = typeof r.resets_at === 'number' ? r.resets_at : null;
+	if (used === null || windowMin === null) return null;
+	return {
+		utilization: used,
+		windowMinutes: windowMin,
+		resetsAt: resetsUnix !== null ? new Date(resetsUnix * 1000).toISOString() : null,
+	};
+}
+
+/// Read the most recent rate_limits snapshot Codex has written to its
+/// session JSONL files. Returns null when:
+///   - no Codex installation is detected
+///   - no session contains a rate_limits-bearing event
+/// Sessions are scanned newest-first (by mtime); the LAST rate_limits
+/// entry within the newest session that contains one wins.
+export async function loadCodexRateLimits(): Promise<CodexRateLimits | null> {
+	const codexDir = getCodexDir();
+	if (!codexDir) return null;
+
+	const sessionsDir = path.join(codexDir, 'sessions');
+	const files = await glob('**/*.jsonl', { cwd: sessionsDir, absolute: true });
+	if (files.length === 0) return null;
+
+	const { stat } = await import('node:fs/promises');
+	const withMtime = await Promise.all(files.map(async (file) => {
+		const s = await stat(file);
+		return { path: file, mtimeMs: s.mtimeMs };
+	}));
+
+	withMtime.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+	for (const { path: file } of withMtime) {
+		let content: string;
+		try {
+			content = await readFile(file, 'utf-8');
+		} catch {
+			continue;
+		}
+
+		let lastSnapshot: CodexRateLimits | null = null;
+		for (const line of content.split(/\r?\n/)) {
+			const trimmed = line.trim();
+			if (!trimmed) continue;
+
+			let entry: Record<string, unknown>;
+			try {
+				entry = JSON.parse(trimmed);
+			} catch {
+				continue;
+			}
+
+			if (entry.type !== 'event_msg') continue;
+			const payload = entry.payload as Record<string, unknown> | undefined;
+			if (!payload || payload.type !== 'token_count') continue;
+			const rl = payload.rate_limits as Record<string, unknown> | undefined;
+			if (!rl) continue;
+			const ts = typeof entry.timestamp === 'string' ? entry.timestamp : null;
+			if (!ts) continue;
+
+			lastSnapshot = {
+				planType: typeof rl.plan_type === 'string' ? rl.plan_type : null,
+				primary: parseRateLimitWindow(rl.primary),
+				secondary: parseRateLimitWindow(rl.secondary),
+				snapshotAt: ts,
+			};
+		}
+
+		if (lastSnapshot) return lastSnapshot;
+	}
+
+	return null;
 }
