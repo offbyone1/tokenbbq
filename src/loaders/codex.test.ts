@@ -37,6 +37,11 @@ describe('loadCodexRateLimits', () => {
 
 	test('extracts the latest rate_limits entry from the most recent session', async () => {
 		const dir = path.join(tmpHome, 'sessions', '2026', '04', '30');
+		// Use a reset time far in the future so the stale-window logic
+		// doesn't kick in for this test — we want to assert the raw
+		// extracted value, not the staleness fallback.
+		const future5h = Math.floor(Date.now() / 1000) + 3600;
+		const future7d = Math.floor(Date.now() / 1000) + 7 * 86400;
 		const event = (usedPrimary: number, ts: string) => JSON.stringify({
 			timestamp: ts,
 			type: 'event_msg',
@@ -46,8 +51,8 @@ describe('loadCodexRateLimits', () => {
 				rate_limits: {
 					limit_id: 'codex',
 					limit_name: null,
-					primary: { used_percent: usedPrimary, window_minutes: 300, resets_at: 1777521443 },
-					secondary: { used_percent: 8.0, window_minutes: 10080, resets_at: 1778051858 },
+					primary: { used_percent: usedPrimary, window_minutes: 300, resets_at: future5h },
+					secondary: { used_percent: 8.0, window_minutes: 10080, resets_at: future7d },
 					credits: null,
 					plan_type: 'plus',
 					rate_limit_reached_type: null,
@@ -69,7 +74,7 @@ describe('loadCodexRateLimits', () => {
 		assert.notStrictEqual(result!.primary, null);
 		assert.strictEqual(result!.primary!.utilization, 38.0);
 		assert.strictEqual(result!.primary!.windowMinutes, 300);
-		assert.strictEqual(result!.primary!.resetsAt, new Date(1777521443 * 1000).toISOString());
+		assert.strictEqual(result!.primary!.resetsAt, new Date(future5h * 1000).toISOString());
 		assert.strictEqual(result!.secondary!.utilization, 8.0);
 		assert.strictEqual(result!.snapshotAt, '2026-04-30T01:40:00.000Z');
 	});
@@ -102,5 +107,32 @@ describe('loadCodexRateLimits', () => {
 		assert.strictEqual(result!.planType, null);
 		assert.strictEqual(result!.primary, null);
 		assert.strictEqual(result!.secondary, null);
+	});
+
+	test('zeroes utilization when the snapshot reset is in the past', async () => {
+		const dir = path.join(tmpHome, 'sessions', '2026', '04', '30');
+		const past = Math.floor(Date.now() / 1000) - 3600; // 1h ago
+		// Use the highest mtime so this fixture is selected as newest.
+		makeSession(dir, 'rollout-stale.jsonl', [JSON.stringify({
+			timestamp: '2026-04-30T05:00:00.000Z',
+			type: 'event_msg',
+			payload: {
+				type: 'token_count',
+				rate_limits: {
+					primary: { used_percent: 94.0, window_minutes: 300, resets_at: past },
+					secondary: { used_percent: 28.0, window_minutes: 10080, resets_at: past },
+					plan_type: 'plus',
+				},
+			},
+		})], 9000);
+
+		const result = await loadCodexRateLimits();
+		assert.notStrictEqual(result, null);
+		// Snapshot's window has rolled over since it was written → show 0%.
+		assert.strictEqual(result!.primary!.utilization, 0);
+		assert.strictEqual(result!.secondary!.utilization, 0);
+		// resetsAt is nulled when stale so the pill falls back to "5h"/"7d".
+		assert.strictEqual(result!.primary!.resetsAt, null);
+		assert.strictEqual(result!.secondary!.resetsAt, null);
 	});
 });

@@ -180,10 +180,18 @@ function parseRateLimitWindow(raw: unknown): CodexWindowUsage | null {
 	const windowMin = typeof r.window_minutes === 'number' ? r.window_minutes : null;
 	const resetsUnix = typeof r.resets_at === 'number' ? r.resets_at : null;
 	if (used === null || windowMin === null) return null;
+	const resetsAtMs = resetsUnix !== null ? resetsUnix * 1000 : null;
+	// If the snapshot's reset time is already in the past, the rolling
+	// window has rolled over since Codex last wrote rate-limits to disk.
+	// Codex only persists rate-limits when it makes an API call, so a
+	// quiet user can have an arbitrarily old snapshot. Treat as 0% used
+	// — closer to truth than the stale (often near-100%) saved value,
+	// and matches what `codex /status` shows live in this case.
+	const isStale = resetsAtMs !== null && resetsAtMs < Date.now();
 	return {
-		utilization: used,
+		utilization: isStale ? 0 : used,
 		windowMinutes: windowMin,
-		resetsAt: resetsUnix !== null ? new Date(resetsUnix * 1000).toISOString() : null,
+		resetsAt: isStale ? null : (resetsAtMs !== null ? new Date(resetsAtMs).toISOString() : null),
 	};
 }
 
