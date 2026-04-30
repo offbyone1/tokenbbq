@@ -31,6 +31,19 @@ export interface SettingsDisplay {
 
 export type ViewState = "compact" | "expanded" | "settings";
 
+export interface CodexWindowUsage {
+  utilization: number;
+  windowMinutes: number;
+  resetsAt: string | null;
+}
+
+export interface CodexUsage {
+  planType: string | null;
+  primary: CodexWindowUsage | null;
+  secondary: CodexWindowUsage | null;
+  snapshotAt: string;
+}
+
 /// Mirrors `api_types::SourceSpend` on the Rust side.
 export interface SourceSpend {
   source: string;
@@ -46,4 +59,5 @@ export interface LocalUsageSummary {
   todayTokens: number;
   weekTokens: number;
   todayBySource: SourceSpend[];
+  codexUsage: CodexUsage | null;
 }

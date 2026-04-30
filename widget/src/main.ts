@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { ClaudeUsageResponse, LocalUsageSummary, Settings, SettingsDisplay } from "./types";
+import { loadToggleState, type SourceToggleState } from "./source-toggle";
 import { renderCompact, renderExpanded, renderError, renderLocalCompact, setViewState } from "./ui";
 
 const SESSION_KEY_LIFETIME_MS = 28 * 24 * 60 * 60 * 1000;
@@ -15,6 +16,7 @@ let localPollTimer: ReturnType<typeof setInterval> | null = null;
 
 let lastUsageJson = "";
 let lastLocal: LocalUsageSummary | null = null;
+let toggleState: SourceToggleState = loadToggleState();
 
 async function fetchUsage(): Promise<void> {
   try {
