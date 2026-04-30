@@ -3,10 +3,11 @@ import type { ClaudeUsageResponse, LocalUsageSummary, ViewState } from "./types"
 import { resolveMode, type SourceMode, type SourceToggleState } from "./source-toggle";
 
 const COMPACT_SIZE_SINGLE = { width: 320, height: 64 };
-// Pill is 116px in dual-mode, plus 12px combined vertical margin =
-// 128px. WebView2 on Windows occasionally reports 1px short, so we
-// add 2px buffer.
-const COMPACT_SIZE_DUAL = { width: 320, height: 130 };
+// Dual-mode needs more horizontal room than single — 2 uniform 76px
+// chips + the divider/today/grip on the right would clip "today" at
+// 320 width. 340 fits everything with breathing room.
+// Pill is 116px tall; +12px margin +2px WebView2 buffer = 130 height.
+const COMPACT_SIZE_DUAL = { width: 340, height: 130 };
 
 function compactSizeForMode(mode: SourceMode): { width: number; height: number } {
   return mode === 'both' ? COMPACT_SIZE_DUAL : COMPACT_SIZE_SINGLE;

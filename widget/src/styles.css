@@ -184,13 +184,11 @@ body {
 .pill-metric {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 5px;
   padding: 6px 10px;
   border-radius: 10px;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  min-width: 80px;
 }
 
 .pill-metric-value {
@@ -246,6 +244,15 @@ body {
    gives a clean separator that visually spans both metric rows. */
 .pill.dual-mode .pill-divider {
   height: 80px;
+}
+
+/* Dual-mode only: rate-limit chips become uniform at the widest
+   realistic content size ("100% 7d"). Single-mode keeps natural
+   sizing. The dual window is 20px wider to fit 2 fixed chips +
+   divider + today + grip without cutoff. */
+.pill.dual-mode .pill-row .pill-metric {
+  width: 76px;
+  justify-content: center;
 }
 
 /* === EXPANDED PANEL === */
@@ -805,9 +812,6 @@ body {
   background: transparent;
   border-color: transparent;
   padding: 6px 8px;
-  /* Today zone uses natural content width, not the rate-limit chip min */
-  min-width: auto;
-  justify-content: flex-start;
 }
 
 .pill-metrics-local .pill-metric-value {
