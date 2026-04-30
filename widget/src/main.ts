@@ -302,7 +302,10 @@ function setupEventListeners(): void {
     saveToggleState(toggleState);
 
     // Snapshot the mode once so renderCompact and setViewState see the
-    // same value even though the latter is async.
+    // same value even though the latter is async. If the user fires two
+    // toggle changes in rapid succession the second handler reads the
+    // toggleState mutated by the first — accepted for V1 (the worst
+    // case is one extra render cycle).
     const mode = currentMode();
 
     // Resize FIRST, then mutate DOM. Otherwise the second row appears

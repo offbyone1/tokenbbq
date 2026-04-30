@@ -3,9 +3,12 @@ import type { ClaudeUsageResponse, LocalUsageSummary, ViewState } from "./types"
 import { resolveMode, type SourceMode, type SourceToggleState } from "./source-toggle";
 
 const COMPACT_SIZE_SINGLE = { width: 320, height: 64 };
-const COMPACT_SIZE_DUAL = { width: 320, height: 100 };
+// 102 not 100: WebView2 on Windows occasionally reports 1px less than
+// the requested logical size, which clips the bottom border of the
+// dual-mode second row. The 2px buffer absorbs that.
+const COMPACT_SIZE_DUAL = { width: 320, height: 102 };
 
-export function compactSizeForMode(mode: SourceMode): { width: number; height: number } {
+function compactSizeForMode(mode: SourceMode): { width: number; height: number } {
   return mode === 'both' ? COMPACT_SIZE_DUAL : COMPACT_SIZE_SINGLE;
 }
 const EXPANDED_WIDTH = 320;
