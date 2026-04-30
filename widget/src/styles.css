@@ -239,13 +239,11 @@ body {
 }
 
 /* In dual-mode the pill grows tall enough for two identical rows.
-   The divider needs to stretch over both rows so it stays a clean
-   vertical separator like in single mode. */
+   Use an explicit height instead of align-self: stretch — the latter
+   was being ignored under the parent's align-items: center. The 70px
+   gives a clean separator that visually spans both metric rows. */
 .pill.dual-mode .pill-divider {
-  height: auto;
-  align-self: stretch;
-  margin-top: 8px;
-  margin-bottom: 8px;
+  height: 70px;
 }
 
 /* === EXPANDED PANEL === */
