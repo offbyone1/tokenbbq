@@ -241,14 +241,19 @@ body {
    Use an explicit height instead of align-self: stretch — the latter
    was being ignored under the parent's align-items: center. The 70px
    gives a clean separator that visually spans both metric rows. */
-.pill.dual-mode .pill-divider {
-  /* Debug-strength visibility: orange brand color, 4px wide, forced
-     display block. If THIS isn't visible the element is being hidden
-     somewhere I can't see, not a styling issue. */
+.pill.dual-mode #pill-divider {
+  /* Maximum-priority diagnostic: position:absolute with fixed coords
+     so flex layout can't hide it. If this red rectangle in the
+     top-left corner doesn't appear, the element itself isn't being
+     unhidden — likely the [hidden] HTML attribute is sticking. */
   display: block !important;
+  position: absolute !important;
+  top: 4px !important;
+  left: 4px !important;
+  width: 12px !important;
   height: 60px !important;
-  width: 4px !important;
-  background: var(--accent) !important;
+  background: red !important;
+  z-index: 9999 !important;
 }
 
 /* Dual-mode only: rate-limit chips fixed at the widest realistic
