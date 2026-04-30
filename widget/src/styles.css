@@ -134,7 +134,7 @@ body {
   gap: 3px;
   padding: 4px 2px;
   cursor: grab;
-  opacity: 0.4;
+  opacity: 0.25;
   transition: opacity 0.2s;
   flex-shrink: 0;
   margin-left: auto;
@@ -237,24 +237,11 @@ body {
   display: none;
 }
 
-/* In dual-mode the pill is taller — give the today zone a min-height
-   so the border-left (defined at base level) spans both rows. */
-.pill.dual-mode .pill-metrics-local {
-  min-height: 60px;
-}
-
-/* Dual-mode chips uniform at 70px so both rows render identically and
-   the pill-rows allocation matches single-mode chip footprint —
-   divider/today/grip line up at the same x as single. 70 fits typical
-   content with 6px buffer; rare "100%+long-label" content may clip 1-
-   2px which is acceptable. */
-.pill.dual-mode .pill-row .pill-metric {
-  flex: 0 0 70px;
-  width: 70px;
-  min-width: 70px;
-  max-width: 70px;
-  justify-content: center;
-  box-sizing: border-box;
+/* In dual-mode the pill is taller so the standalone divider spans
+   both metric rows. Otherwise dual mode is identical to single — same
+   chip widths, same divider, same right-side layout. */
+.pill.dual-mode .pill-divider {
+  height: 60px;
 }
 
 /* === EXPANDED PANEL === */
@@ -799,19 +786,14 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* === LOCAL AI TOOLS — compact pill divider + zone ===
-   The standalone .pill-divider element used to be the separator,
-   but as a 1px-wide flex item it kept getting eaten in dual-mode
-   layout. Replaced everywhere with a border-left on the today zone:
-   same visual, robust across modes. */
+/* === LOCAL AI TOOLS — compact pill divider + zone === */
 .pill-divider {
-  display: none;
-}
-
-.pill-metrics-local {
-  border-left: 1px solid var(--border);
-  margin-left: 8px;
-  padding-left: 8px;
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 8px;
+  position: relative;
+  z-index: 1;
 }
 
 .pill-metrics-local .pill-metric {

@@ -2,11 +2,10 @@ import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import type { ClaudeUsageResponse, LocalUsageSummary, ViewState } from "./types";
 import { resolveMode, type SourceMode, type SourceToggleState } from "./source-toggle";
 
-const COMPACT_SIZE_SINGLE = { width: 322, height: 64 };
-// Window keeps the single-mode width so divider/today/grip end up at
-// the same x as single. Only the height grows to accommodate the
-// second chip row. Pill 84 tall + 12 margin + 2 WebView2 buffer.
-const COMPACT_SIZE_DUAL = { width: 322, height: 98 };
+const COMPACT_SIZE_SINGLE = { width: 320, height: 64 };
+// Identical width to single — only the height grows for the second
+// chip row. Pill 84 tall + 12 margin + 2 WebView2 buffer = 98.
+const COMPACT_SIZE_DUAL = { width: 320, height: 98 };
 
 function compactSizeForMode(mode: SourceMode): { width: number; height: number } {
   return mode === 'both' ? COMPACT_SIZE_DUAL : COMPACT_SIZE_SINGLE;
