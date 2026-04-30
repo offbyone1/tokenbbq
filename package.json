@@ -1,7 +1,7 @@
 {
 	"name": "tokenbbq",
 	"type": "module",
-	"version": "0.4.8",
+	"version": "0.4.9",
 	"description": "Visualize token usage and costs across all major AI coding tools — Claude Code, Codex, Gemini, OpenCode, Amp, Pi",
 	"author": "offbyone1",
 	"license": "MIT",
@@ -42,13 +42,13 @@
 		"node": ">=20"
 	},
 	"scripts": {
-		"build": "tsdown && node -e \"require('fs').renameSync('dist/index.mjs','dist/index.js')\"",
-		"dev": "node --import tsx src/index.ts",
+		"build": "node scripts/inline-wasm.mjs && tsdown && node -e \"require('fs').renameSync('dist/index.mjs','dist/index.js')\"",
+		"dev": "node scripts/inline-wasm.mjs && node --import tsx src/index.ts",
 		"start": "node dist/index.js",
-		"lint": "tsc --noEmit",
+		"lint": "node scripts/inline-wasm.mjs && tsc --noEmit",
 		"test": "node --test --import tsx \"src/**/*.test.ts\"",
 		"prepublishOnly": "npm run build",
-		"build:sidecar": "node scripts/build-sidecar.mjs",
+		"build:sidecar": "node scripts/inline-wasm.mjs && node scripts/build-sidecar.mjs",
 		"widget:install": "npm install --prefix widget",
 		"widget:dev": "node scripts/build-sidecar.mjs --skip-if-no-bun && npm run --prefix widget tauri dev",
 		"widget:build": "npm run build && npm run build:sidecar && npm run --prefix widget tauri build"

@@ -5,8 +5,21 @@ import initSqlJs from 'sql.js';
 import type { UnifiedTokenEvent } from '../types.js';
 import type { LoaderOptions } from './index.js';
 import { resolveProjectRoot } from '../project.js';
+import { SQL_WASM_BASE64 } from './sql-wasm-inline.js';
 
 const HOME = homedir();
+
+// sql.js's default loader fopen()s `sql-wasm.wasm` from the path Emscripten
+// recorded at sql.js build time. After Bun --compile (or any other deploy
+// where node_modules isn't preserved) that path doesn't exist on the user's
+// machine and Emscripten aborts — taking the whole process down with exit
+// code 1 instead of letting our try/catch handle it. Embedding the wasm
+// bytes as base64 and passing them via `wasmBinary` sidesteps the filesystem
+// lookup entirely.
+const SQL_WASM_BINARY: ArrayBuffer = (() => {
+  const buf = Buffer.from(SQL_WASM_BASE64, 'base64');
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+})();
 
 function getOpenCodeDir(): string | null {
   const envPath = (process.env.OPENCODE_DATA_DIR ?? '').trim();
@@ -39,7 +52,7 @@ export async function loadOpenCodeEvents(opts: LoaderOptions = { quiet: false })
 
   let SQL: Awaited<ReturnType<typeof initSqlJs>>;
   try {
-    SQL = await initSqlJs();
+    SQL = await initSqlJs({ wasmBinary: SQL_WASM_BINARY });
   } catch (err) {
     warn('tokenbbq: failed to initialize sql.js for OpenCode loader:', err);
     return [];
