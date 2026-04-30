@@ -86,9 +86,13 @@ function formatDaysCompact(isoString: string | null): string {
   return `${Math.ceil(diffMs / 86400000)}d`;
 }
 
-// Placeholder shapes — replaced with real brand SVGs in Task 8.
-const claudeBadgeSvg = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>`;
-const codexBadgeSvg = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/></svg>`;
+// Monochrome brand marks — small (14-18 px slot), tint via currentColor
+// so they pick up the foreground in both dark and light themes.
+// Claude: stylized burst/sparkle shape (Anthropic's brand language).
+// Codex/OpenAI: simplified knot/loop motif (OpenAI's brand language).
+// Simplified silhouettes, not pixel-exact replicas of the official marks.
+const claudeBadgeSvg = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 L13.2 9.4 L20 7.5 L14.5 12 L20 16.5 L13.2 14.6 L12 22 L10.8 14.6 L4 16.5 L9.5 12 L4 7.5 L10.8 9.4 Z"/></svg>`;
+const codexBadgeSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><ellipse cx="12" cy="12" rx="9" ry="4"/><ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(120 12 12)"/></svg>`;
 
 function toggleRowHtml(
   id: string,
