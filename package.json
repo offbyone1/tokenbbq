@@ -42,7 +42,9 @@
 		"node": ">=20"
 	},
 	"scripts": {
+		"prebuild": "node scripts/inline-dashboard-icon.mjs",
 		"build": "tsdown && node -e \"require('fs').renameSync('dist/index.mjs','dist/index.js')\"",
+		"predev": "node scripts/inline-dashboard-icon.mjs",
 		"dev": "node --import tsx src/index.ts",
 		"start": "node dist/index.js",
 		"lint": "tsc --noEmit",

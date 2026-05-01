@@ -1,6 +1,7 @@
 import type { DashboardData } from './types.js';
 import { SOURCE_COLORS, SOURCE_LABELS } from './types.js';
 import { SOURCE_ORDER } from './aggregator.js';
+import { DASHBOARD_BRAND_ICON_DATA_URL } from './dashboard-icon.js';
 
 export function renderDashboard(data: DashboardData, options?: any): string {
 	const jsonData = JSON.stringify(data).replace(/</g, "\\u003c");
@@ -197,31 +198,7 @@ tailwind.config = {
   <div class="flex items-center justify-between mb-6">
     <div>
       <h1 class="text-3xl font-bold text-white dark:text-white flex items-center gap-3">
-        <span class="brand-mark" aria-hidden="true">${brandLogoUrl ? `<img src="${brandLogoUrl}" alt="" />` : `<svg viewBox="0 0 64 64" role="img" aria-hidden="true">
-            <defs>
-              <linearGradient id="flameOuter" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#fff4b3" />
-                <stop offset="35%" stop-color="#ffd24d" />
-                <stop offset="70%" stop-color="#ff8a1f" />
-                <stop offset="100%" stop-color="#d9480f" />
-              </linearGradient>
-              <linearGradient id="coinFace" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#fff0b5" />
-                <stop offset="45%" stop-color="#e7b448" />
-                <stop offset="100%" stop-color="#9a5d12" />
-              </linearGradient>
-              <linearGradient id="coinInner" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#ffe7a0" />
-                <stop offset="100%" stop-color="#b7771f" />
-              </linearGradient>
-            </defs>
-            <path d="M32 4c4 6 3 10 1 14 7-2 13 4 13 11 0 2 0 3-1 5 4-2 8 2 8 7 0 9-8 17-21 17S11 50 11 41c0-6 4-10 9-11-2-6 2-12 8-12 2 0 3 0 5 1-2-5-2-10-1-15z" fill="url(#flameOuter)" />
-            <path d="M32 11c2 4 2 7 1 10 4-2 8 2 8 6 0 2 0 3-1 4 3-1 6 1 6 5 0 7-6 13-14 13s-14-6-14-13c0-4 2-6 5-7-1-4 2-7 5-7 1 0 2 0 3 1-1-4-1-7 1-12z" fill="#ff5b12" opacity="0.65" />
-            <circle cx="32" cy="38" r="18" fill="url(#coinFace)" stroke="#f5d57c" stroke-width="2.2" />
-            <circle cx="32" cy="38" r="13.5" fill="url(#coinInner)" stroke="#8b5713" stroke-width="1.4" opacity="0.96" />
-            <path d="M24 29h16v4h-6v14h-4V33h-6z" fill="#7b4a0c" opacity="0.35" />
-            <path d="M23 28h18v4h-7v14h-4V32h-7z" fill="#fff1bf" />
-          </svg>`}</span>
+        <span class="brand-mark" aria-hidden="true"><img src="${brandLogoUrl ?? DASHBOARD_BRAND_ICON_DATA_URL}" alt="" /></span>
         TokenBBQ
       </h1>
       <p class="text-gray-400 mt-1">AI Coding Tool Usage Dashboard</p>
