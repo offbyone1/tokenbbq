@@ -11,6 +11,9 @@ export function renderDashboard(data: DashboardData, options?: any): string {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TokenBBQ Dashboard</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,${encodeURIComponent(
+		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="#E87B35" d="M16 3c2 5-2 7-2 11 0 3 2 5 4 5s4-2 4-5c0-2-1-3-1-5 4 3 6 7 6 11 0 6-5 10-11 10S5 26 5 20c0-7 7-9 11-17z"/></svg>`,
+	)}">
 <script src="https://cdn.tailwindcss.com"><\/script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"><\/script>
 <script>
