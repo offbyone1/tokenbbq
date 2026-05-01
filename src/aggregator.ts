@@ -30,20 +30,23 @@ export const SOURCE_ORDER: Source[] = [
 	'pi',
 ];
 
+// Local-time date keys (YYYY-MM-DD). `Date.getFullYear()`/`getMonth()`/`getDate()`
+// already return local-time components — no need to construct an
+// `Intl.DateTimeFormat` per call (the constructor loads CLDR locale data
+// and dominates aggregation time when called per-event on 30k+ events).
 function dateKey(timestamp: string): string {
-	const parts = new Intl.DateTimeFormat('en-CA', {
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit',
-	}).formatToParts(new Date(timestamp));
-	const year = parts.find((p) => p.type === 'year')?.value ?? '0000';
-	const month = parts.find((p) => p.type === 'month')?.value ?? '00';
-	const day = parts.find((p) => p.type === 'day')?.value ?? '00';
-	return `${year}-${month}-${day}`;
+	const d = new Date(timestamp);
+	const y = d.getFullYear();
+	const m = d.getMonth() + 1;
+	const day = d.getDate();
+	return `${y}-${m < 10 ? '0' : ''}${m}-${day < 10 ? '0' : ''}${day}`;
 }
 
 function monthKey(timestamp: string): string {
-	return dateKey(timestamp).slice(0, 7);
+	const d = new Date(timestamp);
+	const y = d.getFullYear();
+	const m = d.getMonth() + 1;
+	return `${y}-${m < 10 ? '0' : ''}${m}`;
 }
 
 function unique<T>(arr: T[]): T[] {
