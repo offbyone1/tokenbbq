@@ -31,11 +31,19 @@ export const SOURCE_ORDER: Source[] = [
 ];
 
 function dateKey(timestamp: string): string {
-	return new Date(timestamp).toISOString().slice(0, 10);
+	const parts = new Intl.DateTimeFormat('en-CA', {
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+	}).formatToParts(new Date(timestamp));
+	const year = parts.find((p) => p.type === 'year')?.value ?? '0000';
+	const month = parts.find((p) => p.type === 'month')?.value ?? '00';
+	const day = parts.find((p) => p.type === 'day')?.value ?? '00';
+	return `${year}-${month}-${day}`;
 }
 
 function monthKey(timestamp: string): string {
-	return new Date(timestamp).toISOString().slice(0, 7);
+	return dateKey(timestamp).slice(0, 7);
 }
 
 function unique<T>(arr: T[]): T[] {
