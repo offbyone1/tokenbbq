@@ -27,3 +27,6 @@ Thumbs.db
 # Claude Code local state
 .claude/
 CLAUDE.md
+
+# Local planning notes
+LOCAL-AUTH-DISCOVERY.md

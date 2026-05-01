@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { loadCodexRateLimits } from './codex.js';
+import { loadCodexEvents, loadCodexRateLimits } from './codex.js';
 
 function makeSession(dir: string, name: string, lines: string[], mtimeSec?: number): string {
 	const file = path.join(dir, name);
@@ -134,5 +134,89 @@ describe('loadCodexRateLimits', () => {
 		// resetsAt is nulled when stale so the pill falls back to "5h"/"7d".
 		assert.strictEqual(result!.primary!.resetsAt, null);
 		assert.strictEqual(result!.secondary!.resetsAt, null);
+	});
+});
+
+describe('loadCodexEvents', () => {
+	let tmpHome: string;
+	const ORIG_HOME = process.env.CODEX_HOME;
+
+	before(() => {
+		tmpHome = mkdtempSync(path.join(tmpdir(), 'codex-events-test-'));
+		mkdirSync(path.join(tmpHome, 'sessions', '2026', '04', '30'), { recursive: true });
+		process.env.CODEX_HOME = tmpHome;
+	});
+
+	after(() => {
+		if (ORIG_HOME === undefined) delete process.env.CODEX_HOME;
+		else process.env.CODEX_HOME = ORIG_HOME;
+		rmSync(tmpHome, { recursive: true, force: true });
+	});
+
+	test('prefers last_token_usage and splits cached input into its own bucket', async () => {
+		const dir = path.join(tmpHome, 'sessions', '2026', '04', '30');
+		makeSession(dir, 'rollout-usage.jsonl', [
+			JSON.stringify({
+				timestamp: '2026-04-30T10:00:00.000Z',
+				type: 'turn_context',
+				payload: { model: 'gpt-5.5' },
+			}),
+			JSON.stringify({
+				timestamp: '2026-04-30T10:00:01.000Z',
+				type: 'event_msg',
+				payload: {
+					type: 'token_count',
+					info: {
+						total_token_usage: {
+							input_tokens: 1000,
+							cached_input_tokens: 700,
+							output_tokens: 100,
+							reasoning_output_tokens: 20,
+							total_tokens: 1100,
+						},
+						last_token_usage: {
+							input_tokens: 1000,
+							cached_input_tokens: 700,
+							output_tokens: 100,
+							reasoning_output_tokens: 20,
+							total_tokens: 1100,
+						},
+					},
+				},
+			}),
+			JSON.stringify({
+				timestamp: '2026-04-30T10:00:02.000Z',
+				type: 'event_msg',
+				payload: {
+					type: 'token_count',
+					info: {
+						total_token_usage: {
+							input_tokens: 1200,
+							cached_input_tokens: 800,
+							output_tokens: 110,
+							reasoning_output_tokens: 25,
+							total_tokens: 1310,
+						},
+						last_token_usage: {
+							input_tokens: 900,
+							cached_input_tokens: 600,
+							output_tokens: 80,
+							reasoning_output_tokens: 10,
+							total_tokens: 980,
+						},
+					},
+				},
+			}),
+		], 1000);
+
+		const events = await loadCodexEvents();
+		assert.equal(events.length, 2);
+		assert.deepEqual(events[1].tokens, {
+			input: 300,
+			output: 80,
+			cacheCreation: 0,
+			cacheRead: 600,
+			reasoning: 10,
+		});
 	});
 });

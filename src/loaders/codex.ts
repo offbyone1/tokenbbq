@@ -128,29 +128,23 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 			const totalUsage = normalizeUsage(info?.total_token_usage);
 			const lastUsage = normalizeUsage(info?.last_token_usage);
 
-			if (!totalUsage) continue;
-
-			let raw: RawUsage;
-			if (prevTotals === null) {
-				raw = lastUsage ?? totalUsage;
-			} else {
+			let raw: RawUsage | null = lastUsage;
+			if (raw === null && totalUsage !== null) {
 				raw = subtractUsage(totalUsage, prevTotals);
 			}
-			prevTotals = totalUsage;
-			if (raw.input === 0 && raw.output === 0 && raw.cached === 0) continue;
-
-			if (raw.input === 0 && raw.output === 0) continue;
+			if (totalUsage !== null) prevTotals = totalUsage;
+			if (raw === null) continue;
+			if (raw.input === 0 && raw.output === 0 && raw.cached === 0 && raw.reasoning === 0) continue;
 
 			const extracted = extractModel({ ...payload, info });
 			if (extracted) currentModel = extracted;
 			const model = currentModel ?? FALLBACK_MODEL;
 
-			// OpenAI reports `input_tokens` as the TOTAL prompt size including
-			// the cached portion; `cached_input_tokens` is the subset served from
-			// cache. Storing both verbatim double-counts cache reads inside
-			// `input`. Split them so `tokens.input` is fresh-input only — matches
-			// the semantics of every other loader (Claude Code, Gemini, etc.).
-			const freshInput = Math.max(raw.input - raw.cached, 0);
+			// OpenAI reports `input_tokens` as the total prompt size; cache reads
+			// are a subset. TokenBBQ's Input column follows ccusage's terminal
+			// table: non-cached input here, cache reads in their own bucket.
+			const cachedInput = Math.min(raw.cached, raw.input);
+			const freshInput = Math.max(raw.input - cachedInput, 0);
 			events.push({
 				source: 'codex',
 				timestamp,
@@ -160,7 +154,7 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 					input: freshInput,
 					output: raw.output,
 					cacheCreation: 0,
-					cacheRead: raw.cached,
+					cacheRead: cachedInput,
 					reasoning: raw.reasoning,
 				},
 				costUSD: 0,

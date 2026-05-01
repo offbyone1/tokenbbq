@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { aggregateByProject, buildDashboardData } from './aggregator.js';
+import { totalTokenCount } from './types.js';
 import type { CodexRateLimits, UnifiedTokenEvent } from './types.js';
 
 function ev(over: Partial<UnifiedTokenEvent> = {}): UnifiedTokenEvent {
@@ -109,5 +110,12 @@ describe('buildDashboardData', () => {
   test('defaults codexRateLimits to null when omitted', () => {
     const out = buildDashboardData([]);
     assert.equal(out.codexRateLimits, null);
+  });
+});
+
+describe('token totals', () => {
+  test('counts cache read in totals without double-counting reasoning output', () => {
+    const tokens = { input: 300, output: 80, cacheCreation: 0, cacheRead: 600, reasoning: 10 };
+    assert.equal(totalTokenCount(tokens), 980);
   });
 });

@@ -1,7 +1,7 @@
 {
 	"name": "tokenbbq",
 	"type": "module",
-	"version": "0.4.5",
+	"version": "0.4.7",
 	"description": "Visualize token usage and costs across all major AI coding tools — Claude Code, Codex, Gemini, OpenCode, Amp, Pi",
 	"author": "offbyone1",
 	"license": "MIT",

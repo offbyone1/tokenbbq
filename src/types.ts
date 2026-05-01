@@ -162,7 +162,7 @@ export function addTokens(a: TokenCounts, b: TokenCounts): TokenCounts {
 }
 
 export function totalTokenCount(t: TokenCounts): number {
-	return t.input + t.output + t.cacheCreation + t.cacheRead + t.reasoning;
+	return t.input + t.output + t.cacheCreation + t.cacheRead;
 }
 
 export const SOURCE_LABELS: Record<Source, string> = {

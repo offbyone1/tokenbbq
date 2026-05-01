@@ -430,7 +430,7 @@ function addTokens(a, b) {
   };
 }
 function sumTokens(tokens) {
-  return tokens.input + tokens.output + tokens.cacheCreation + tokens.cacheRead + tokens.reasoning;
+  return tokens.input + tokens.output + tokens.cacheCreation + tokens.cacheRead;
 }
 function unique(values) {
   return [...new Set(values)];
@@ -1062,7 +1062,7 @@ function escapeHtml(s) {
 
 function totalProjectTokens(p) {
   const t = p.tokens || {};
-  return (t.input || 0) + (t.output || 0) + (t.cacheCreation || 0) + (t.cacheRead || 0) + (t.reasoning || 0);
+  return (t.input || 0) + (t.output || 0) + (t.cacheCreation || 0) + (t.cacheRead || 0);
 }
 
 function renderProjects(data) {
@@ -1140,7 +1140,7 @@ function renderProjects(data) {
         tbody.appendChild(emptyTr);
       } else {
         for (const s of perSource) {
-          const tot = (s.tokens.input||0) + (s.tokens.output||0) + (s.tokens.cacheCreation||0) + (s.tokens.cacheRead||0) + (s.tokens.reasoning||0);
+          const tot = (s.tokens.input||0) + (s.tokens.output||0) + (s.tokens.cacheCreation||0) + (s.tokens.cacheRead||0);
           const chip =
             '<span class="inline-block px-1.5 py-0.5 rounded text-xs" style="background:' +
             SOURCE_COLORS[s.source] + '22;color:' + SOURCE_COLORS[s.source] + '">' +
@@ -1709,7 +1709,7 @@ function buildCostPerDayPopup(data) {
 function buildTopModelPopup(data) {
   const modelsWithTok = data.byModel.map(m => ({
     m,
-    tok: m.tokens.input + m.tokens.output + m.tokens.cacheRead + m.tokens.cacheCreation + (m.tokens.reasoning || 0)
+    tok: m.tokens.input + m.tokens.output + m.tokens.cacheRead + m.tokens.cacheCreation
   }));
   modelsWithTok.sort((a, b) => b.tok - a.tok);
   const totalTok = Math.max(modelsWithTok.reduce((s, r) => s + r.tok, 0), 1);
@@ -1791,7 +1791,7 @@ function buildSourceChartPopup(data) {
   const sourceTok = data.bySource.map(s => ({
     source: s.source,
     tokens: s.tokens,
-    total: s.tokens.input + s.tokens.output + s.tokens.cacheRead + s.tokens.cacheCreation + (s.tokens.reasoning || 0)
+    total: s.tokens.input + s.tokens.output + s.tokens.cacheRead + s.tokens.cacheCreation
   }));
   const total = Math.max(sourceTok.reduce((a, b) => a + b.total, 0), 1);
   const dSegs = sourceTok.map(s => ({
