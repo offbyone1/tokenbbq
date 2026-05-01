@@ -53,8 +53,8 @@
 
     <!-- Expanded Panel -->
     <div id="expanded-view" class="panel">
-      <div class="titlebar" data-tauri-drag-region>
-        <div class="titlebar-left" data-tauri-drag-region>
+      <div class="titlebar">
+        <div class="titlebar-left">
           <img src="/src/assets/tokenbbq-icon.png" alt="" class="titlebar-fire" width="24" height="24">
           <span class="titlebar-name">TokenBBQ</span>
         </div>
@@ -79,6 +79,11 @@
         <!-- Populated by ui.ts -->
       </div>
 
+      <!-- Onboarding hint: shown the first two times the panel opens, then never again. -->
+      <div id="dblclick-hint" class="hint-toast" hidden>
+        <span class="hint-dot" aria-hidden="true"></span>
+        <span class="hint-text">Double-click to minimize</span>
+      </div>
 
       <!-- Settings Overlay -->
       <div class="settings-overlay" id="settings-overlay">

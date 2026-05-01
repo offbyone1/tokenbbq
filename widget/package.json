@@ -1,6 +1,6 @@
 {
   "name": "tokenbbq-widget",
-  "version": "0.4.5",
+  "version": "0.4.7",
   "private": true,
   "description": "Always-on-top desktop widget for TokenBBQ — showing claude.ai limits + local AI tool usage at a glance",
   "author": "offbyone1",

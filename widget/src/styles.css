@@ -71,6 +71,10 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+body.view-transitioning {
+  background: transparent;
+}
+
 #app {
   width: 100vw;
   height: 100vh;
@@ -223,8 +227,8 @@ body {
   display: none;
 }
 .pill-row-logo {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   display: inline-flex;
   color: var(--text-secondary);
   flex-shrink: 0;
@@ -243,6 +247,29 @@ body {
   height: 60px;
 }
 
+/* In dual-mode the standalone TokenBBQ flame is hidden — each pill-row
+   shows its own brand logo (Claude/Codex) so users can tell the rows
+   apart. The window size is unchanged; rows just shift left into the
+   freed space. */
+.pill.dual-mode .pill-fire {
+  display: none;
+}
+
+/* Empty state: both source toggles off. Boxes inside .pill-rows show a
+   centered minus and hide their unit label, but keep the same min-width
+   they have when populated so the pill layout doesn't visibly shrink.
+   Scoped to .pill-rows so the today/local zone on the right is untouched. */
+.pill.pill-empty .pill-rows .pill-metric {
+  justify-content: center;
+  min-width: 70px;
+}
+.pill.pill-empty .pill-rows .pill-metric-value {
+  color: var(--text-tertiary);
+}
+.pill.pill-empty .pill-rows .pill-metric-label {
+  display: none;
+}
+
 /* In dual-mode all four chips render at the same width by letting
    pill-metrics fill the row and each chip take equal flex share.
    Single-mode is untouched — chips stay natural width there. */
@@ -252,6 +279,111 @@ body {
 .pill.dual-mode .pill-row .pill-metric {
   flex: 1;
   justify-content: center;
+}
+
+/* === Onboarding hint toast ===
+   Shown briefly the first two times the panel expands, then permanently
+   stashed via localStorage. Centered in the panel, doesn't intercept
+   clicks (pointer-events: none) so it never blocks the user.
+
+   Visual approach: frosted-glass pill instead of solid card-color +
+   accent-border. Depth comes from backdrop blur + a faint top highlight
+   ("lit from above"), not from a glow. The accent reads as a single
+   small dot, keeping the chrome quiet. */
+.hint-toast {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.4);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 14px 7px 12px;
+  background: rgba(20, 20, 28, 0.62);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: 0.015em;
+  font-feature-settings: "ss01", "cv11";
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 100;
+  /* Clip the shimmer sweep to the pill shape. */
+  overflow: hidden;
+  /* Springy "pop out from behind": scale up past 1.0 and settle, with a
+     gentle opacity ramp so it doesn't read as instant. */
+  transition: opacity 0.4s ease-out,
+              transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+/* Edge-trace — a thin accent-colored light filament travels once around
+   the pill perimeter, hugging the border. The conic-gradient draws a
+   bright slice rotating around the element's center; the mask-composite
+   ring clips everything but the 1px border so the visible result is a
+   spark gliding along the rim. Runs once shortly after pop-in. */
+@property --trace-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+.hint-toast::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: 1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--trace-angle),
+    transparent              0deg,
+    transparent              300deg,
+    rgba(255, 180, 110, 0.5) 335deg,
+    rgba(255, 235, 200, 0.95) 352deg,
+    rgba(255, 180, 110, 0.5) 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+          mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+}
+.hint-toast.visible::after {
+  animation: hint-edge-trace 1.6s cubic-bezier(0.5, 0, 0.5, 1) 0.3s 1;
+}
+@keyframes hint-edge-trace {
+  0%   { --trace-angle: 0deg;   opacity: 0; }
+  10%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { --trace-angle: 360deg; opacity: 0; }
+}
+.hint-toast[hidden] {
+  display: none;
+}
+.hint-toast.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+.hint-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  /* Tiny halo so the dot doesn't read as flat / pasted-on against the
+     frosted bg, but stays well below "glow" territory. */
+  box-shadow: 0 0 6px -1px var(--accent-glow);
 }
 
 /* === EXPANDED PANEL === */
@@ -378,7 +510,20 @@ body {
 /* Usage row — borderless */
 .usage-row {
   padding: 10px 0;
+}
+
+.usage-body.animate-rows .usage-row {
   animation: slide-in-row 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.usage-body.silent-refresh .usage-row,
+.usage-body.silent-refresh .local-row {
+  animation: none;
+}
+
+.usage-body.silent-refresh .progress-fill,
+.usage-body.silent-refresh .local-row-bar {
+  transition: none;
 }
 
 .usage-row + .usage-row {
@@ -427,7 +572,7 @@ body {
 
 .usage-row-reset {
   font-size: 10px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
   letter-spacing: 0.02em;
   display: flex;
@@ -438,7 +583,7 @@ body {
 .usage-row-reset svg {
   width: 10px;
   height: 10px;
-  opacity: 0.5;
+  opacity: 0.7;
 }
 
 /* Progress bar */
@@ -834,41 +979,111 @@ body {
   border-top: none;
 }
 
-.local-section-header {
+/* Brand-marked section header (Claude / Codex rate-limit blocks). The title
+   carries the brand color; the small logo on the left ties it visually to
+   the matching toggle row above. Slightly more top breathing room than a
+   plain section header so the two brand blocks read as distinct cards. */
+.section-header.brand {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Two-column grid: Claude rate windows on the left, Codex on the right.
+   Used when both sources have plan data, so the user can compare 5h/weekly
+   utilization at a glance. The vertical divider mirrors the pill's dual-mode
+   look. Falls back to a single full-width column when only one source has
+   data (handled in TS by skipping the grid wrapper). */
+.brand-rates-grid {
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  column-gap: 10px;
+  margin-top: 4px;
+}
+
+.brand-rates-divider {
+  background: var(--border-subtle);
+  align-self: stretch;
+  margin: 12px 0 4px;
+}
+
+.brand-rates-col {
+  min-width: 0;
+}
+
+/* Inside the grid we want each column to start cleanly with its brand header.
+   Reset the .section-header.brand top border + margin since the divider line
+   between columns already provides the visual separation. */
+.brand-rates-col .section-header.brand {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+/* Tighten rate-limit rows when squeezed into a 140-ish-px column so the
+   row name + percent still fit on one line and the reset text does not
+   wrap awkwardly. */
+.brand-rates-col .usage-row {
+  padding: 6px 0;
+}
+
+.brand-rates-col .usage-row-name {
+  font-size: 11px;
+}
+
+.brand-rates-col .usage-row-value {
+  font-size: 12px;
+}
+
+.brand-rates-col .usage-row-reset {
+  font-size: 10px;
+}
+
+.section-header-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.section-header-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.section-header-logo svg {
+  width: 11px;
+  height: 11px;
+  display: block;
+}
+
+.local-header-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin-top: 8px;
   border-top: 1px solid var(--border-subtle);
   padding-top: 12px;
-  align-items: flex-start;
 }
 
-.local-header-titles {
+.local-header-row {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
 }
 
-.local-header-title {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-}
-
-.local-header-date {
+.local-header-label {
   font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 400;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   letter-spacing: 0.02em;
-  text-transform: none;
 }
 
-.local-header-stats {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+.local-header-row-week .local-header-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .local-header-today {
@@ -877,7 +1092,6 @@ body {
   color: var(--accent);
   font-weight: 600;
   letter-spacing: 0.01em;
-  text-transform: none;
   line-height: 1;
 }
 
@@ -890,10 +1104,9 @@ body {
 
 .local-header-week {
   font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 400;
   color: var(--text-tertiary);
-  text-transform: none;
   letter-spacing: 0.02em;
 }
 
@@ -902,6 +1115,9 @@ body {
   flex-direction: column;
   gap: 4px;
   padding: 6px 0;
+}
+
+.usage-body.animate-rows .local-row {
   animation: slide-in-row 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 

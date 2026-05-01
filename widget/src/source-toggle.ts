@@ -3,8 +3,9 @@
  *   "claude" — Claude Code Subscription only (default; current behavior)
  *   "codex"  — Codex only
  *   "both"   — stacked dual-mode (pill is taller)
+ *   "none"   — both toggles off; pill shows empty placeholder boxes
  */
-export type SourceMode = 'claude' | 'codex' | 'both';
+export type SourceMode = 'claude' | 'codex' | 'both' | 'none';
 
 const STORAGE_KEY_CLAUDE = 'tokenbbq-show-claude';
 const STORAGE_KEY_CODEX = 'tokenbbq-show-codex';
@@ -36,18 +37,24 @@ export function saveToggleState(state: SourceToggleState): void {
 
 /**
  * Resolve the effective render mode given user toggles AND data
- * availability. If the user toggled Codex on but the sidecar reports
- * codexUsage=null (no plan / no data), silently fall back to claude
- * so the pill never renders empty rows.
+ * availability.
+ *
+ * If the user toggled both sources off we honor that explicitly with
+ * 'none' (empty placeholder pill) rather than silently showing Claude.
+ * If a source is toggled on but the data hasn't arrived yet we still
+ * pick its mode so the layout doesn't flicker between empty and full
+ * during initial load.
  */
 export function resolveMode(
   state: SourceToggleState,
   hasClaudeData: boolean,
   hasCodexData: boolean,
 ): SourceMode {
+  if (!state.claude && !state.codex) return 'none';
+
   const effClaude = state.claude && hasClaudeData;
   const effCodex = state.codex && hasCodexData;
   if (effClaude && effCodex) return 'both';
   if (effCodex) return 'codex';
-  return 'claude'; // default — matches legacy behavior even if !hasClaudeData
+  return 'claude';
 }

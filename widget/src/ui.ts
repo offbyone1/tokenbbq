@@ -1,4 +1,4 @@
-import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalSize, PhysicalPosition } from "@tauri-apps/api/window";
 import type { ClaudeUsageResponse, LocalUsageSummary, ViewState } from "./types";
 import { resolveMode, type SourceMode, type SourceToggleState } from "./source-toggle";
 
@@ -10,9 +10,10 @@ const COMPACT_SIZE_DUAL = { width: 320, height: 98 };
 function compactSizeForMode(mode: SourceMode): { width: number; height: number } {
   return mode === 'both' ? COMPACT_SIZE_DUAL : COMPACT_SIZE_SINGLE;
 }
-const EXPANDED_WIDTH = 320;
-// Initial guess; the real height is recomputed from content via fitExpandedToContent.
-const EXPANDED_INITIAL_HEIGHT = 320;
+// Expanded panel widens beyond the pill so the side-by-side Claude/Codex
+// rate-limit grid has breathing room (the pill stays narrow because it
+// lives on screen all the time).
+const EXPANDED_WIDTH = 440;
 // Hard ceiling so a runaway list never grows past a usable widget — content
 // scrolls inside the panel instead.
 const EXPANDED_MAX_HEIGHT = 720;
@@ -69,6 +70,27 @@ export function utilizationColor(pct: number): string {
   return `var(--${colorTier(pct)})`;
 }
 
+// Long-form reset labels for the expanded panel. "Resets in 2h 15m" or
+// "Resets May 5". Empty string when no timestamp is available yet.
+function formatTimeUntil(isoString: string | null): string {
+  if (!isoString) return "";
+  const diffMs = new Date(isoString).getTime() - Date.now();
+  if (diffMs <= 0) return "Resetting...";
+  const hours = Math.floor(diffMs / 3600000);
+  const minutes = Math.floor((diffMs % 3600000) / 60000);
+  if (hours >= 24) {
+    return `Resets in ${Math.floor(hours / 24)}d ${hours % 24}h`;
+  }
+  return `Resets in ${hours}h ${minutes}m`;
+}
+
+function formatResetDate(isoString: string | null): string {
+  if (!isoString) return "";
+  const diffMs = new Date(isoString).getTime() - Date.now();
+  if (diffMs < 86400000) return formatTimeUntil(isoString);
+  return `Resets ${new Date(isoString).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+}
+
 // Compact pill labels: just the unit-of-time-until-reset, no prose. Returns
 // "" when we don't have a timestamp yet so callers can fall back to a static
 // placeholder instead of rendering an empty label.
@@ -90,23 +112,100 @@ function formatDaysCompact(isoString: string | null): string {
 
 // Monochrome brand marks — small (14-18 px slot), tint via currentColor
 // so they pick up the foreground in both dark and light themes.
-// Claude: stylized burst/sparkle shape (Anthropic's brand language).
+// Claude: 8-petal radial burst (Anthropic's brand language — softer than a
+// plain star, with rounded "tentacle" ends).
 // Codex/OpenAI: simplified knot/loop motif (OpenAI's brand language).
 // Simplified silhouettes, not pixel-exact replicas of the official marks.
-const claudeBadgeSvg = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 L13.2 9.4 L20 7.5 L14.5 12 L20 16.5 L13.2 14.6 L12 22 L10.8 14.6 L4 16.5 L9.5 12 L4 7.5 L10.8 9.4 Z"/></svg>`;
-const codexBadgeSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><ellipse cx="12" cy="12" rx="9" ry="4"/><ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(120 12 12)"/></svg>`;
+// const claudeBadgeSvg = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g transform="translate(12 12)"><ellipse cx="0" cy="-6.5" rx="1.7" ry="4.8"/><ellipse cx="0" cy="-6.5" rx="1.7" ry="4.8" transform="rotate(45)"/><ellipse cx="0" cy="-6.5" rx="1.7" ry="4.8" transform="rotate(90)"/><ellipse cx="0" cy="-6.5" rx="1.7" ry="4.8" transform="rotate(135)"/><ellipse cx="0" cy="-6.5" rx="1.7" ry="4.8" transform="rotate(180)"/><ellipse cx="0" cy="-6.5" rx="1.7" ry="4.8" transform="rotate(225)"/><ellipse cx="0" cy="-6.5" rx="1.7" ry="4.8" transform="rotate(270)"/><ellipse cx="0" cy="-6.5" rx="1.7" ry="4.8" transform="rotate(315)"/></g></svg>`;
+// const codexBadgeSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><ellipse cx="12" cy="12" rx="10.5" ry="4.7"/><ellipse cx="12" cy="12" rx="10.5" ry="4.7" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10.5" ry="4.7" transform="rotate(120 12 12)"/></svg>`;
+const claudeBadgeSvg = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#D97757" fill-rule="evenodd" clip-rule="evenodd" d="M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0V10.95h3V5h17.998v5.949zM6 10.949h1.488V8.102H6v2.847zm10.51 0H18V8.102h-1.49v2.847z"/></svg>`;
+const codexBadgeSvg = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.064 3.344a4.578 4.578 0 0 1 2.285-.312c1 .115 1.891.54 2.673 1.275.01.01.024.017.037.021a.09.09 0 0 0 .043 0 4.55 4.55 0 0 1 3.046.275l.047.022.116.057a4.581 4.581 0 0 1 2.188 2.399c.209.51.313 1.041.315 1.595a4.24 4.24 0 0 1-.134 1.223.123.123 0 0 0 .03.115c.594.607.988 1.33 1.183 2.17.289 1.425-.007 2.71-.887 3.854l-.136.166a4.548 4.548 0 0 1-2.201 1.388.123.123 0 0 0-.081.076c-.191.551-.383 1.023-.74 1.494-.9 1.187-2.222 1.846-3.711 1.838-1.187-.006-2.239-.44-3.157-1.302a.107.107 0 0 0-.105-.024c-.388.125-.78.143-1.204.138a4.441 4.441 0 0 1-1.945-.466 4.544 4.544 0 0 1-1.61-1.335c-.152-.202-.303-.392-.414-.617a5.81 5.81 0 0 1-.37-.961 4.582 4.582 0 0 1-.014-2.298.124.124 0 0 0 .006-.056.085.085 0 0 0-.027-.048 4.467 4.467 0 0 1-1.034-1.651 3.896 3.896 0 0 1-.251-1.192 5.189 5.189 0 0 1 .141-1.6c.337-1.112.982-1.985 1.933-2.618.212-.141.413-.251.601-.33.215-.089.43-.164.646-.227a.098.098 0 0 0 .065-.066 4.51 4.51 0 0 1 .829-1.615 4.535 4.535 0 0 1 1.837-1.388zm3.482 10.565a.637.637 0 0 0 0 1.272h3.636a.637.637 0 1 0 0-1.272h-3.636zM8.462 9.23a.637.637 0 0 0-1.106.631l1.272 2.224-1.266 2.136a.636.636 0 1 0 1.095.649l1.454-2.455a.636.636 0 0 0 .005-.64L8.462 9.23z" fill="url(#codex-gradient)"/><defs><linearGradient id="codex-gradient" x1="12" x2="12" y1="3" y2="21" gradientUnits="userSpaceOnUse"><stop stop-color="#B1A7FF"/><stop offset=".5" stop-color="#7A9DFF"/><stop offset="1" stop-color="#3941FF"/></linearGradient></defs></svg>`;
+
+const CLAUDE_BRAND_COLOR = '#c15f3c';
+const CODEX_BRAND_COLOR = '#74aa9c';
+
+const clockSvg = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8a6.5 6.5 0 1 1 1 3.5"/><path d="M1 5v3.5H4.5"/></svg>`;
+
+// Single utilization row for the expanded panel: name + percent on top,
+// progress bar below, "Resets in ..." line beneath. `resetText` is the
+// already-formatted string (different windows want different formats).
+//
+// When `brandColor` is set the entire row (dot, percent, bar) renders in
+// that brand color — used for the Claude / Codex rate-limit blocks where
+// the bar fill width already conveys utilization, so we drop the
+// green/orange/red tier signal in favor of brand identity. Without
+// `brandColor` we fall back to the tier coloring (still used by Extra
+// Usage and any other utilization row added later).
+function usageRowHtml(
+  name: string,
+  pct: number,
+  resetText: string,
+  brandColor?: string,
+): string {
+  let color: string;
+  let glow: string;
+  let fillStyle: string;
+  if (brandColor) {
+    color = brandColor;
+    // Soft halo around the dot + bar in the same hue. 33 = ~20% alpha.
+    glow = `${brandColor}66`;
+    fillStyle = `width:${pct}%;background:${brandColor};box-shadow:0 0 8px ${brandColor}55`;
+  } else {
+    const tier = colorTier(pct);
+    color = `var(--${tier})`;
+    glow = `var(--${tier}-glow)`;
+    fillStyle = `width:${pct}%`;
+  }
+  const fillClass = brandColor ? 'progress-fill' : `progress-fill ${colorTier(pct)}`;
+  return `
+    <div class="usage-row">
+      <div class="usage-row-header">
+        <span class="usage-row-name"><span class="dot" style="background:${color};box-shadow:0 0 4px ${glow}"></span>${name}</span>
+        <span class="usage-row-value">${Math.round(pct)}%</span>
+      </div>
+      <div class="progress-track"><div class="${fillClass}" style="${fillStyle}"></div></div>
+      ${resetText ? `<div class="usage-row-meta"><span class="usage-row-reset">${clockSvg}${resetText}</span></div>` : ""}
+    </div>`;
+}
+
+// Section-header with a small brand logo + colored title. Used to mark the
+// Claude / Codex rate-limit sections so they visually pair with the toggle
+// rows above (same logos, same brand colors).
+function brandSectionHeaderHtml(label: string, logoSvg: string, color: string): string {
+  return `
+    <div class="section-header brand">
+      <span class="section-header-title" style="color:${color}">
+        <span class="section-header-logo">${logoSvg}</span>${label}
+      </span>
+    </div>`;
+}
+
+// Map a Codex window's length (minutes) to a human label parallel to the
+// Claude side ("5-Hour Window" / "Weekly Window"). Falls back to a generic
+// hour/day form for unusual window sizes.
+function codexWindowLabel(windowMinutes: number): string {
+  if (!Number.isFinite(windowMinutes) || windowMinutes <= 0) return "Window";
+  if (windowMinutes < 1440) {
+    const hours = Math.round(windowMinutes / 60);
+    return `${hours}-Hour Window`;
+  }
+  const days = Math.round(windowMinutes / 1440);
+  if (days === 7) return "Weekly Window";
+  return `${days}-Day Window`;
+}
 
 function toggleRowHtml(
   id: string,
   label: string,
   logoSvg: string,
+  logoColor: string,
   checked: boolean,
   disabled: boolean,
   hint?: string,
 ): string {
   return `
     <div class="source-toggle-row${disabled ? ' disabled' : ''}">
-      <span class="source-toggle-logo">${logoSvg}</span>
+      <span class="source-toggle-logo" style="color:${logoColor}">${logoSvg}</span>
       <span class="source-toggle-label">${label}${hint ? `<span class="source-toggle-hint">${hint}</span>` : ''}</span>
       <label class="source-toggle-switch">
         <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
@@ -131,18 +230,50 @@ export function renderCompact(
   const fiveHourLabel = document.getElementById("five-hour-label")!;
   const sevenDayLabel = document.getElementById("seven-day-label")!;
 
-  // Helper: reset to single-row layout (hide secondary row).
-  // Logos are intentionally NEVER shown in either row — the user's UX
-  // call. We keep the slots in the HTML so a future redesign can place
-  // brand marks elsewhere (e.g. as a footnote) without re-wiring.
+  const primaryLogo = document.getElementById('pill-row-logo-primary')!;
+  const secondaryLogo = document.getElementById('pill-row-logo-secondary')!;
+
+  // Toggle the empty-state class up front. CSS handles the styling
+  // (centered dash, hidden label, muted color) so we don't have to
+  // reach for these visual details in every branch below.
+  document.getElementById('compact-view')!.classList.toggle('pill-empty', mode === 'none');
+
+  if (mode === 'none') {
+    // User has both Claude and Codex toggled off. Show two empty boxes
+    // with a centered minus — no fallback numbers, no labels.
+    setSingleRowVisibility();
+    fiveHour.textContent = '−'; // U+2212 MINUS SIGN
+    fiveHour.style.color = '';
+    sevenDay.textContent = '−';
+    sevenDay.style.color = '';
+    fiveHourLabel.textContent = '';
+    sevenDayLabel.textContent = '';
+    return;
+  }
+
+  // Helper: reset to single-row layout (hide secondary row + both row logos).
+  // In single-mode the standalone .pill-fire on the left identifies the source.
+  // In dual-mode the flame is hidden via CSS and each row carries its own brand
+  // logo so users can tell Claude (top) from Codex (bottom) at a glance.
   function setSingleRowVisibility(): void {
     document.getElementById('pill-row-secondary')!.setAttribute('hidden', '');
+    primaryLogo.setAttribute('hidden', '');
+    primaryLogo.innerHTML = '';
+    secondaryLogo.setAttribute('hidden', '');
+    secondaryLogo.innerHTML = '';
   }
 
   if (mode === 'both' && codex) {
-    // Dual-mode: just show the second row. Both logos stay hidden by
-    // default (set in HTML); we don't populate them here.
+    // Dual-mode: show both rows AND their brand logos. CSS hides the
+    // standalone .pill-fire in this mode, so the row logos are the only
+    // brand identifier visible.
     document.getElementById('pill-row-secondary')!.removeAttribute('hidden');
+    primaryLogo.innerHTML = claudeBadgeSvg;
+    primaryLogo.style.color = CLAUDE_BRAND_COLOR;
+    primaryLogo.removeAttribute('hidden');
+    secondaryLogo.innerHTML = codexBadgeSvg;
+    secondaryLogo.style.color = CODEX_BRAND_COLOR;
+    secondaryLogo.removeAttribute('hidden');
 
     // Primary row = Claude
     const fhPctC = usage.five_hour?.utilization ?? 0;
@@ -200,7 +331,7 @@ export function renderCompact(
 export function renderLocalCompact(local: LocalUsageSummary | null): void {
   const divider = document.getElementById("pill-divider")!;
   const local_zone = document.getElementById("pill-local")!;
-  const today = document.getElementById("today-compact")!;
+  const today = document.getElementById("today-compact")! as HTMLElement;
 
   if (!local) {
     divider.hidden = true;
@@ -211,6 +342,68 @@ export function renderLocalCompact(local: LocalUsageSummary | null): void {
   divider.hidden = false;
   local_zone.hidden = false;
   today.textContent = formatTokens(local.todayTokens);
+
+  // Tint the today value with the brand color of whichever local AI tool
+  // contributed the most tokens today — gives an at-a-glance read of the
+  // dominant source. Falls back to the CSS default (--accent) when there's
+  // no per-source breakdown yet.
+  if (local.todayBySource.length > 0) {
+    const top = local.todayBySource.reduce((a, b) => (b.tokens > a.tokens ? b : a));
+    today.style.color = sourceColor(top.source);
+  } else {
+    today.style.color = '';
+  }
+}
+
+// Claude rate-limit block: header + 5h + 7d windows. Returns an empty
+// string when no rate-limit data is present so callers can decide whether
+// to render at all. Used both stand-alone (full-width) and inside the
+// two-column grid.
+function renderClaudeRatesHtml(usage: ClaudeUsageResponse): string {
+  if (!usage.five_hour && !usage.seven_day) return '';
+  let out = brandSectionHeaderHtml('Claude Code', claudeBadgeSvg, CLAUDE_BRAND_COLOR);
+  if (usage.five_hour) {
+    out += usageRowHtml(
+      '5-Hour Window',
+      usage.five_hour.utilization,
+      formatTimeUntil(usage.five_hour.resets_at),
+      CLAUDE_BRAND_COLOR,
+    );
+  }
+  if (usage.seven_day) {
+    out += usageRowHtml(
+      'Weekly Window',
+      usage.seven_day.utilization,
+      formatResetDate(usage.seven_day.resets_at),
+      CLAUDE_BRAND_COLOR,
+    );
+  }
+  return out;
+}
+
+// Codex rate-limit block: parallel structure to the Claude block above. The
+// caller already gates on plan availability — this function trusts that and
+// just renders whatever windows exist.
+function renderCodexRatesHtml(codex: NonNullable<LocalUsageSummary['codexUsage']>): string {
+  if (!codex.primary && !codex.secondary) return '';
+  let out = brandSectionHeaderHtml('Codex', codexBadgeSvg, CODEX_BRAND_COLOR);
+  if (codex.primary) {
+    out += usageRowHtml(
+      codexWindowLabel(codex.primary.windowMinutes),
+      codex.primary.utilization,
+      formatTimeUntil(codex.primary.resetsAt),
+      CODEX_BRAND_COLOR,
+    );
+  }
+  if (codex.secondary) {
+    out += usageRowHtml(
+      codexWindowLabel(codex.secondary.windowMinutes),
+      codex.secondary.utilization,
+      formatResetDate(codex.secondary.resetsAt),
+      CODEX_BRAND_COLOR,
+    );
+  }
+  return out;
 }
 
 export function renderExpanded(
@@ -219,6 +412,8 @@ export function renderExpanded(
   toggleState: SourceToggleState = { claude: true, codex: false },
 ): void {
   const container = document.getElementById("usage-bars")!;
+  const panel = document.getElementById("expanded-view")!;
+  const isLiveRefresh = panel.classList.contains("visible") && container.childElementCount > 0;
 
   const codex = local?.codexUsage ?? null;
   const codexAvailable = codex !== null && codex.planType !== null;
@@ -228,9 +423,28 @@ export function renderExpanded(
 
   let html = `<div class="section-header">Pill displays</div>`;
   html += `<div class="source-toggle-list">`;
-  html += toggleRowHtml('toggle-claude', 'Claude Code', claudeBadgeSvg, toggleState.claude, false);
-  html += toggleRowHtml('toggle-codex', 'Codex', codexBadgeSvg, toggleState.codex && codexAvailable, !codexAvailable, codexHint);
+  html += toggleRowHtml('toggle-claude', 'Claude Code', claudeBadgeSvg, CLAUDE_BRAND_COLOR, toggleState.claude, false);
+  html += toggleRowHtml('toggle-codex', 'Codex', codexBadgeSvg, CODEX_BRAND_COLOR, toggleState.codex && codexAvailable, !codexAvailable, codexHint);
   html += `</div>`;
+
+  // Claude + Codex rate-limit blocks. Side-by-side when both have data;
+  // single full-width column when only one is present. Hidden completely
+  // when neither has data.
+  const claudeBlock = renderClaudeRatesHtml(usage);
+  const codexBlock = codexAvailable && codex ? renderCodexRatesHtml(codex) : '';
+
+  if (claudeBlock && codexBlock) {
+    html += `
+      <div class="brand-rates-grid">
+        <div class="brand-rates-col">${claudeBlock}</div>
+        <div class="brand-rates-divider"></div>
+        <div class="brand-rates-col">${codexBlock}</div>
+      </div>`;
+  } else if (claudeBlock) {
+    html += claudeBlock;
+  } else if (codexBlock) {
+    html += codexBlock;
+  }
 
   if (usage.extra_usage && usage.extra_usage.is_enabled) {
     const ex = usage.extra_usage;
@@ -257,14 +471,20 @@ export function renderExpanded(
     html += renderLocalExpandedHtml(local);
   }
 
+  container.classList.toggle("animate-rows", !isLiveRefresh);
+  container.classList.toggle("silent-refresh", isLiveRefresh);
   container.innerHTML = html;
 
-  // Resize the host window to fit whatever we just rendered. Two rAFs because
-  // the first one fires before the browser has reflowed the new innerHTML;
-  // measuring then would still see the old layout.
-  if (document.getElementById("expanded-view")!.classList.contains("visible")) {
-    requestAnimationFrame(() => requestAnimationFrame(() => { void fitExpandedToContent(); }));
-  }
+  // Intentionally do NOT auto-resize the window when new data arrives while
+  // the panel is open. Two reasons:
+  //  1. setPosition would yank the window back to the captured pill anchor
+  //     every poll, even if the user has it placed comfortably — that's
+  //     extremely user-hostile.
+  //  2. Any size feedback loop (e.g. a flex:1 body whose scrollHeight tracks
+  //     the window) would silently grow the window until it hits MAX_HEIGHT.
+  // The window is sized exactly once on expand (via measureExpandedHeight)
+  // and stays that size. If content outgrows it, the body's overflow-y:auto
+  // takes over and scrolls inside the fixed window.
 }
 
 function renderLocalExpandedHtml(local: LocalUsageSummary): string {
@@ -297,14 +517,14 @@ function renderLocalExpandedHtml(local: LocalUsageSummary): string {
   }
 
   return `
-    <div class="section-header local-section-header">
-      <div class="local-header-titles">
-        <span class="local-header-title">Local AI Tools</span>
-        <span class="local-header-date">${escapeHtml(dateLabel)}</span>
-      </div>
-      <div class="local-header-stats">
+    <div class="local-header-block">
+      <div class="local-header-row local-header-row-today">
+        <span class="local-header-label">${escapeHtml(dateLabel)}</span>
         <span class="local-header-today">${formatTokens(local.todayTokens)}<span class="local-header-unit"> tok</span></span>
-        <span class="local-header-week">${formatTokens(local.weekTokens)} · 7d</span>
+      </div>
+      <div class="local-header-row local-header-row-week">
+        <span class="local-header-label">7d</span>
+        <span class="local-header-week">${formatTokens(local.weekTokens)}</span>
       </div>
     </div>
     ${inner}
@@ -348,6 +568,229 @@ export function renderError(message: string): void {
     </div>`;
 }
 
+// pillPosition is the pill's "home" — the visible top-left of the compact
+// pill in physical px. Stored in *visible* coordinates (not tauri-window
+// coordinates) so it's mode-independent: pill has a 6-px CSS margin while
+// panel uses inset:0, so the same tauri-x means different visible-x in the
+// two modes; storing the visible-x sidesteps that mismatch.
+//
+// Updated only when in PILL mode (pill drag-end, or first capture). Panel
+// drags deliberately do NOT update — the pill's home stays put while the
+// user moves the panel around, so collapsing always returns to the same
+// pill spot.
+interface PillPosition {
+  visibleX: number;  // physical px
+  visibleY: number;
+}
+let pillPosition: PillPosition | null = null;
+
+// Read the current pill's visible top-left. Caller must be in pill mode
+// (i.e. compact-view does NOT have hidden-pill); we don't double-check
+// because every call site is gated.
+async function captureCurrentPillPosition(): Promise<void> {
+  try {
+    const win = getCurrentWindow();
+    const pos = await win.outerPosition();
+    const scale = await win.scaleFactor();
+    const insetPhys = Math.round(PILL_FRAME_INSET_LOGICAL * scale);
+    pillPosition = {
+      visibleX: pos.x + insetPhys,
+      visibleY: pos.y + insetPhys,
+    };
+  } catch (e) {
+    console.warn('captureCurrentPillPosition failed:', e);
+  }
+}
+
+// Hook for main.ts: refresh pillPosition after a drag-end, but only if
+// currently in pill mode. Panel drags are no-ops here.
+export async function refreshPillPositionIfPillMode(): Promise<void> {
+  if (currentFrameInsetLogical() === PILL_FRAME_INSET_LOGICAL) {
+    await captureCurrentPillPosition();
+  }
+}
+
+// Position the panel so its visible top-left equals pillPosition. Panel
+// grows down-right naturally; if it would overflow the work area, the
+// clamp shifts it up-left so it stays fully visible. Anchor is top-left,
+// not bottom-right, so the user perceives the panel as "opening downward
+// from the pill" the way a normal Windows app does.
+async function positionPanelAtPill(): Promise<void> {
+  if (!pillPosition) return;
+  try {
+    const win = getCurrentWindow();
+    const size = await win.outerSize();
+    // Panel's CSS inset is 0, so panel tauri-x equals visible-x.
+    let targetX = pillPosition.visibleX;
+    let targetY = pillPosition.visibleY;
+    const work = getWorkAreaPhysical(0);
+    if (work) {
+      targetX = Math.max(work.minX, Math.min(targetX, work.maxX - size.width));
+      targetY = Math.max(work.minY, Math.min(targetY, work.maxY - size.height));
+    }
+    await win.setPosition(new PhysicalPosition(targetX, targetY));
+  } catch (e) {
+    console.warn('positionPanelAtPill failed:', e);
+  }
+}
+
+// Restore the pill to its home. Pill's CSS inset is 6, so tauri-x =
+// visible-x - 6 (logical, scaled to physical).
+async function restorePillToHome(): Promise<void> {
+  if (!pillPosition) return;
+  try {
+    const win = getCurrentWindow();
+    const size = await win.outerSize();
+    const scale = await win.scaleFactor();
+    const insetPhys = Math.round(PILL_FRAME_INSET_LOGICAL * scale);
+    let targetX = pillPosition.visibleX - insetPhys;
+    let targetY = pillPosition.visibleY - insetPhys;
+    const work = getWorkAreaPhysical(PILL_FRAME_INSET_LOGICAL);
+    if (work) {
+      targetX = Math.max(work.minX, Math.min(targetX, work.maxX - size.width));
+      targetY = Math.max(work.minY, Math.min(targetY, work.maxY - size.height));
+    }
+    await win.setPosition(new PhysicalPosition(targetX, targetY));
+  } catch (e) {
+    console.warn('restorePillToHome failed:', e);
+  }
+}
+
+// Physical-px breathing room kept between the *visible element* and every
+// work-area edge. This intentionally does not scale with Windows DPI:
+// "8 px from the wall" should look like 8 actual screen pixels, not
+// 10-12 px on 125-150% scaling.
+const EDGE_MARGIN_PHYSICAL = 8;
+
+// Compact pill has a 6-px outer margin in CSS (`.pill { margin: 6px }`)
+// to give the hover glow room before WebView2's overflow:hidden clips it.
+// Expanded panel uses `inset: 0` and fills its window edge-to-edge. The
+// Tauri window itself is the same in both modes, so when we clamp the
+// window position with EDGE_MARGIN we end up with a visible pill that
+// sits 6 px farther from the screen edge than the visible panel.
+// Callers compensate by passing this inset to getWorkAreaPhysical when
+// the active view is the compact pill.
+export const PILL_FRAME_INSET_LOGICAL = 6;
+
+// Returns true when the compact pill (not the expanded panel) is the
+// currently visible surface. The .hidden-pill class is added in
+// setViewState whenever we transition to the expanded/settings view, so
+// its absence means the pill is the visible element.
+export function currentFrameInsetLogical(): number {
+  const compact = document.getElementById('compact-view');
+  if (compact && !compact.classList.contains('hidden-pill')) {
+    return PILL_FRAME_INSET_LOGICAL;
+  }
+  return 0;
+}
+
+type WorkAreaPhysical = { minX: number; minY: number; maxX: number; maxY: number };
+let monitorWorkAreaPhysical: WorkAreaPhysical | null = null;
+
+export function setMonitorWorkAreaPhysical(workArea: WorkAreaPhysical | null): void {
+  monitorWorkAreaPhysical = workArea;
+}
+
+// Work-area bounds in physical pixels: the screen area NOT covered by the
+// Windows taskbar, inset by (EDGE_MARGIN_PHYSICAL - frameInsetPhysical) on
+// every side. Prefer the Tauri monitor union so dragging can cross monitors;
+// fall back to Chromium's current-screen work area if the monitor API is not
+// available yet during early startup.
+export function getWorkAreaPhysical(
+  frameInsetLogical = 0,
+): WorkAreaPhysical | null {
+  const dpr = window.devicePixelRatio;
+  if (!dpr || !Number.isFinite(dpr)) return null;
+  const frameInsetPhysical = Math.round(frameInsetLogical * dpr);
+  const margin = Math.max(0, EDGE_MARGIN_PHYSICAL - frameInsetPhysical);
+  if (monitorWorkAreaPhysical) {
+    return {
+      minX: monitorWorkAreaPhysical.minX + margin,
+      minY: monitorWorkAreaPhysical.minY + margin,
+      maxX: monitorWorkAreaPhysical.maxX - margin,
+      maxY: monitorWorkAreaPhysical.maxY - margin,
+    };
+  }
+  // availLeft / availTop are non-standard but supported in Chromium-based
+  // WebView2; TS's lib.dom doesn't declare them, hence the cast.
+  const screenAny = window.screen as unknown as { availLeft?: number; availTop?: number };
+  const left = (screenAny.availLeft ?? 0) * dpr;
+  const top = (screenAny.availTop ?? 0) * dpr;
+  const width = window.screen.availWidth * dpr;
+  const height = window.screen.availHeight * dpr;
+  return {
+    minX: Math.round(left) + margin,
+    minY: Math.round(top) + margin,
+    maxX: Math.round(left + width) - margin,
+    maxY: Math.round(top + height) - margin,
+  };
+}
+
+// (Old positionExpandedWindow / pillAnchor removed — replaced by the
+// captureVisibleAnchor / applyVisibleAnchor pair above, which is mode-aware
+// and handles both expand and collapse transitions consistently.)
+
+// Measure how tall the expanded panel needs to be at EXPANDED_WIDTH, *without*
+// resizing the actual window. We clone the live panel into an off-screen
+// container at the target width, force a layout pass, read titlebar height +
+// usage-body scrollHeight, then dispose. The clone inherits the user's
+// rendered content, so the measurement reflects whatever data is currently
+// shown — no special seeding needed.
+//
+// This is the secret sauce that makes the expand transition smooth: instead
+// of resizing twice (initial floor → final content fit, with a visible jump
+// in between), we resize ONCE to the right height before revealing the
+// panel.
+// Measure how tall the expanded panel needs to be at EXPANDED_WIDTH without
+// touching the live window. We build a minimal off-screen measurement
+// container at the target width that mirrors the live structure (titlebar
+// + usage-body content) but with NO flex / NO overflow constraints, so
+// children stack to their natural sizes. The result is the exact height
+// needed to display all content without scrolling.
+//
+// Why not clone the whole .panel element: the panel's own CSS uses
+// `position: absolute; inset: 0; display: flex; flex-direction: column`
+// plus a `flex: 1` body. Cloning that into an auto-sized container creates
+// phantom height (flex:1 children behave oddly without a sized parent) and
+// settings-overlay's `inset: 0` muddies the measurement. Building from
+// scratch is simpler and predictable.
+function measureExpandedHeight(panel: HTMLElement, targetWidth: number): number {
+  const titlebar = panel.querySelector('.titlebar') as HTMLElement | null;
+  const body = panel.querySelector('.usage-body') as HTMLElement | null;
+  if (!titlebar || !body) return EXPANDED_MIN_HEIGHT;
+
+  const measure = document.createElement('div');
+  measure.style.cssText = [
+    'position: absolute',
+    'top: -10000px',
+    'left: 0',
+    `width: ${targetWidth}px`,
+    'visibility: hidden',
+    'pointer-events: none',
+    'border: 1px solid transparent', // matches .panel's 1px border so width math is identical
+    'border-radius: 16px',
+  ].join(';');
+
+  // Clone the titlebar — it carries its own CSS classes, layout is identical.
+  const titlebarClone = titlebar.cloneNode(true) as HTMLElement;
+  measure.appendChild(titlebarClone);
+
+  // Recreate the usage-body but force natural-flow layout so children stack
+  // to their real heights instead of fighting flex:1.
+  const bodyMeasure = document.createElement('div');
+  bodyMeasure.className = 'usage-body';
+  bodyMeasure.style.cssText = 'flex: 0 0 auto; overflow: visible; height: auto; max-height: none';
+  bodyMeasure.innerHTML = body.innerHTML;
+  measure.appendChild(bodyMeasure);
+
+  document.body.appendChild(measure);
+  void measure.offsetHeight; // force synchronous layout
+  const total = measure.offsetHeight;
+  document.body.removeChild(measure);
+
+  return Math.min(EXPANDED_MAX_HEIGHT, Math.max(EXPANDED_MIN_HEIGHT, total));
+}
+
 export async function setViewState(state: ViewState, mode: SourceMode = 'claude'): Promise<void> {
   const pill = document.getElementById("compact-view")!;
   const panel = document.getElementById("expanded-view")!;
@@ -355,50 +798,69 @@ export async function setViewState(state: ViewState, mode: SourceMode = 'claude'
   const win = getCurrentWindow();
 
   if (state === "compact") {
+    // Restore the pill to its home. Note we deliberately do NOT capture
+    // the current panel position — the pill's home is a separate concept
+    // that only updates from pill drags, so the user can move the panel
+    // around mid-expand and the pill still returns to where it was.
+    document.body.classList.remove("view-transitioning");
     settings.classList.remove("visible");
     panel.classList.remove("visible");
     pill.classList.remove("hidden-pill");
     pill.classList.toggle("dual-mode", mode === 'both');
     const sz = compactSizeForMode(mode);
     await win.setSize(new LogicalSize(sz.width, sz.height));
+    await restorePillToHome();
   } else if (state === "expanded") {
+    // Capture the pill's home on first expand. Subsequent expands (after
+    // the pill has been dragged) keep the position fresh via main.ts's
+    // drag-end hook (refreshPillPositionIfPillMode).
+    if (!pillPosition) await captureCurrentPillPosition();
     settings.classList.remove("visible");
-    pill.classList.add("hidden-pill");
-    // Set an initial floor so the panel has space to lay out before we measure.
-    // fitExpandedToContent then snaps the window to the actual content height.
-    await win.setSize(new LogicalSize(EXPANDED_WIDTH, EXPANDED_INITIAL_HEIGHT));
+    panel.classList.remove("visible");
+    document.body.classList.add("view-transitioning");
+    // Pre-measure the panel content at the target width using an off-screen
+    // clone, so we can resize the window once to its final size instead of
+    // doing a two-stage initial-then-fit dance that the user perceives as
+    // jitter.
+    const targetH = measureExpandedHeight(panel, EXPANDED_WIDTH);
+    await win.setSize(new LogicalSize(EXPANDED_WIDTH, targetH));
+    await positionPanelAtPill();
+    // Window is now at final size + position. Swap pill -> panel in the next
+    // paint so the user never sees an empty resized body between states.
     requestAnimationFrame(() => {
+      pill.classList.add("hidden-pill");
       panel.classList.add("visible");
-      requestAnimationFrame(() => { void fitExpandedToContent(); });
+      document.body.classList.remove("view-transitioning");
     });
   } else if (state === "settings") {
+    document.body.classList.remove("view-transitioning");
     settings.classList.add("visible");
   }
 }
 
-/// Snap the host window to fit the expanded panel's actual content height,
-/// clamped to [MIN, MAX]. Beyond MAX the panel scrolls instead. Called on
-/// view transitions and after every renderExpanded so the window grows /
-/// shrinks as data arrives (e.g. local AI tools section appearing late).
-///
-/// We measure titlebar + usage-body.scrollHeight rather than panel.scrollHeight
-/// because the body has overflow:auto — when the window is currently smaller
-/// than the content, the panel's own scrollHeight reports the truncated
-/// (clipped) value, not what we'd need to fit everything.
-export async function fitExpandedToContent(): Promise<void> {
-  const panel = document.getElementById("expanded-view");
-  if (!panel || !panel.classList.contains("visible")) return;
-  const titlebar = panel.querySelector(".titlebar") as HTMLElement | null;
-  const body = panel.querySelector(".usage-body") as HTMLElement | null;
-  const titleH = titlebar?.offsetHeight ?? 0;
-  const bodyH = body?.scrollHeight ?? panel.scrollHeight;
-  // +8px absorbs sub-pixel rounding under fractional DPR and leaves a small
-  // breathing margin under the last row so the panel doesn't end flush with
-  // the window edge.
-  const target = Math.min(EXPANDED_MAX_HEIGHT, Math.max(EXPANDED_MIN_HEIGHT, titleH + bodyH + 8));
+// One-shot work-area clamp at startup: if a previously-saved pill position
+// is now outside the work area (e.g. the user changed their taskbar height
+// or display setup since last run), nudge the window back inside. The
+// regular drag is clamped inline in setupDragRegions (JS drag), so we
+// don't need a continuous listener fighting Windows' move events.
+export async function clampWindowToWorkAreaOnce(): Promise<void> {
   try {
-    await getCurrentWindow().setSize(new LogicalSize(EXPANDED_WIDTH, target));
-  } catch {
-    // Window may have been hidden between rAF and resize; nothing useful to do.
+    const win = getCurrentWindow();
+    // Startup is always compact-mode, so use the pill's frame inset so
+    // the visible pill ends up exactly EDGE_MARGIN_PHYSICAL from the edge.
+    const work = getWorkAreaPhysical(currentFrameInsetLogical());
+    if (!work) return;
+    const pos = await win.outerPosition();
+    const size = await win.outerSize();
+    const maxX = work.maxX - size.width;
+    const maxY = work.maxY - size.height;
+    const clampedX = Math.max(work.minX, Math.min(pos.x, maxX));
+    const clampedY = Math.max(work.minY, Math.min(pos.y, maxY));
+    if (clampedX !== pos.x || clampedY !== pos.y) {
+      await win.setPosition(new PhysicalPosition(clampedX, clampedY));
+    }
+  } catch (e) {
+    console.warn('startup work-area clamp failed:', e);
   }
 }
+

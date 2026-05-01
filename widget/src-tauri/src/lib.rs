@@ -14,7 +14,7 @@ fn position_widget(win: &WebviewWindow) {
     let Ok(Some(monitor)) = win.primary_monitor() else { return };
     let Ok(win_size) = win.outer_size() else { return };
     let mon = monitor.size();
-    const RIGHT_MARGIN: i32 = 24;
+    const RIGHT_MARGIN: i32 = 0;
     let x = mon.width as i32 - win_size.width as i32 - RIGHT_MARGIN;
     let y = (mon.height as i32 * 75 / 100) - (win_size.height as i32 / 2);
     let _ = win.set_position(PhysicalPosition::new(x, y));

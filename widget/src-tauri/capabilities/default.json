@@ -6,6 +6,8 @@
     "core:default",
     "core:window:default",
     "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-available-monitors",
     "core:window:allow-hide",
     "core:window:allow-show",
     "core:window:allow-set-focus",
