@@ -19,6 +19,8 @@ pub struct ExtraUsage {
     pub monthly_limit: Option<f64>,
     pub used_credits: Option<f64>,
     pub utilization: Option<f64>,
+    #[serde(default)]
+    pub currency: Option<String>,
 }
 
 /// Settings POSTed from the frontend. `saved_at` is set server-side on

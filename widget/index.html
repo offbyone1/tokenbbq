@@ -96,6 +96,12 @@
           </div>
         </div>
         <div class="settings-content">
+          <!--
+            Legacy sessionKey-paste form (commented out in 0.6.x; OAuth path
+            from ~/.claude/.credentials.json is now primary). Re-enable the
+            block below if/when the unified-headers path stops working — see
+            commands.rs for the matching backend toggles.
+
           <div class="settings-hint">
             <strong>Setup (one time):</strong>
             <ol>
@@ -124,11 +130,24 @@
             </div>
           </div>
 
+          -->
+
+
           <div class="theme-toggle-row">
             <label class="field-label">Autostart</label>
             <div class="theme-switch-wrap">
               <label class="theme-switch">
                 <input type="checkbox" id="autostart-toggle" />
+                <span class="theme-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="theme-toggle-row">
+            <label class="field-label">Show Extra Usage</label>
+            <div class="theme-switch-wrap">
+              <label class="theme-switch">
+                <input type="checkbox" id="extra-usage-toggle" />
                 <span class="theme-slider"></span>
               </label>
             </div>

@@ -65,7 +65,7 @@ pub fn run() {
             commands::fetch_usage,
             commands::save_settings,
             commands::load_settings,
-            commands::auto_detect_org,
+            // commands::auto_detect_org,  // legacy sessionKey path — see commands.rs
             commands::fetch_local_usage,
             commands::open_full_dashboard,
         ])

@@ -141,6 +141,8 @@ function usageRowHtml(
   pct: number,
   resetText: string,
   brandColor?: string,
+  metaIcon: string = clockSvg,
+  valueText?: string,
 ): string {
   let color: string;
   let glow: string;
@@ -161,23 +163,32 @@ function usageRowHtml(
     <div class="usage-row">
       <div class="usage-row-header">
         <span class="usage-row-name"><span class="dot" style="background:${color};box-shadow:0 0 4px ${glow}"></span>${name}</span>
-        <span class="usage-row-value">${Math.round(pct)}%</span>
+        <span class="usage-row-value">${valueText ?? `${Math.round(pct)}%`}</span>
       </div>
       <div class="progress-track"><div class="${fillClass}" style="${fillStyle}"></div></div>
-      ${resetText ? `<div class="usage-row-meta"><span class="usage-row-reset">${clockSvg}${resetText}</span></div>` : ""}
+      ${resetText ? `<div class="usage-row-meta"><span class="usage-row-reset">${metaIcon}${resetText}</span></div>` : ""}
     </div>`;
 }
 
-// Section-header with a small brand logo + colored title. Used to mark the
-// Claude / Codex rate-limit sections so they visually pair with the toggle
-// rows above (same logos, same brand colors).
-function brandSectionHeaderHtml(label: string, logoSvg: string, color: string): string {
+// Section-header with a colored title. Used to mark the Claude / Codex
+// rate-limit sections; brand color matches the toggle rows above.
+function brandSectionHeaderHtml(label: string, color: string): string {
   return `
     <div class="section-header brand">
-      <span class="section-header-title" style="color:${color}">
-        <span class="section-header-logo">${logoSvg}</span>${label}
-      </span>
+      <span class="section-header-title" style="color:${color}">${label}</span>
     </div>`;
+}
+
+// ISO-4217 → display symbol. Falls back to the code itself (e.g. "GBP")
+// when we don't have a glyph mapped, so the meta line never goes blank.
+function currencySymbol(code: string | null | undefined): string {
+  switch ((code ?? 'EUR').toUpperCase()) {
+    case 'EUR': return '€';
+    case 'USD': return '$';
+    case 'GBP': return '£';
+    case 'JPY': return '¥';
+    default: return `${code} `;
+  }
 }
 
 // Map a Codex window's length (minutes) to a human label parallel to the
@@ -360,8 +371,10 @@ export function renderLocalCompact(local: LocalUsageSummary | null): void {
 // to render at all. Used both stand-alone (full-width) and inside the
 // two-column grid.
 function renderClaudeRatesHtml(usage: ClaudeUsageResponse): string {
-  if (!usage.five_hour && !usage.seven_day) return '';
-  let out = brandSectionHeaderHtml('Claude Code', claudeBadgeSvg, CLAUDE_BRAND_COLOR);
+  const showExtra = localStorage.getItem("tokenbbq-show-extra-usage") === "1";
+  const hasExtra = showExtra && !!(usage.extra_usage && usage.extra_usage.is_enabled);
+  if (!usage.five_hour && !usage.seven_day && !hasExtra) return '';
+  let out = brandSectionHeaderHtml('Claude Code', CLAUDE_BRAND_COLOR);
   if (usage.five_hour) {
     out += usageRowHtml(
       '5-Hour Window',
@@ -378,6 +391,19 @@ function renderClaudeRatesHtml(usage: ClaudeUsageResponse): string {
       CLAUDE_BRAND_COLOR,
     );
   }
+  if (hasExtra && usage.extra_usage) {
+    const ex = usage.extra_usage;
+    const used = ex.used_credits ?? 0;
+    const limit = ex.monthly_limit ?? 0;
+    const hasLimit = limit > 0;
+    const sym = currencySymbol(ex.currency);
+    const meta = hasLimit
+      ? `${sym}${(used / 100).toFixed(2)} / ${sym}${(limit / 100).toFixed(0)}`
+      : `${sym}${(used / 100).toFixed(2)} / <span class="infinity">∞</span>`;
+    const pct = hasLimit ? (ex.utilization ?? 0) : 0;
+    const valueText = hasLimit ? undefined : '—';
+    out += usageRowHtml('Extra Usage', pct, meta, CLAUDE_BRAND_COLOR, '', valueText);
+  }
   return out;
 }
 
@@ -386,7 +412,7 @@ function renderClaudeRatesHtml(usage: ClaudeUsageResponse): string {
 // just renders whatever windows exist.
 function renderCodexRatesHtml(codex: NonNullable<LocalUsageSummary['codexUsage']>): string {
   if (!codex.primary && !codex.secondary) return '';
-  let out = brandSectionHeaderHtml('Codex', codexBadgeSvg, CODEX_BRAND_COLOR);
+  let out = brandSectionHeaderHtml('Codex', CODEX_BRAND_COLOR);
   if (codex.primary) {
     out += usageRowHtml(
       codexWindowLabel(codex.primary.windowMinutes),
@@ -421,7 +447,7 @@ export function renderExpanded(
     ? '(no data)'
     : (codex.planType === null ? '(API key — no plan)' : '');
 
-  let html = `<div class="section-header">Pill displays</div>`;
+  let html = `<div class="section-header">Compact view</div>`;
   html += `<div class="source-toggle-list">`;
   html += toggleRowHtml('toggle-claude', 'Claude Code', claudeBadgeSvg, CLAUDE_BRAND_COLOR, toggleState.claude, false);
   html += toggleRowHtml('toggle-codex', 'Codex', codexBadgeSvg, CODEX_BRAND_COLOR, toggleState.codex && codexAvailable, !codexAvailable, codexHint);
@@ -444,27 +470,6 @@ export function renderExpanded(
     html += claudeBlock;
   } else if (codexBlock) {
     html += codexBlock;
-  }
-
-  if (usage.extra_usage && usage.extra_usage.is_enabled) {
-    const ex = usage.extra_usage;
-    const pct = ex.utilization ?? 0;
-    const used = ex.used_credits ?? 0;
-    const limit = ex.monthly_limit ?? 0;
-    const tier = colorTier(pct);
-    const color = `var(--${tier})`;
-    const glow = `var(--${tier}-glow)`;
-    html += `
-      <div class="usage-row">
-        <div class="usage-row-header">
-          <span class="usage-row-name"><span class="dot" style="background:${color};box-shadow:0 0 4px ${glow}"></span>Extra Usage</span>
-          <span class="credits-amount">
-            <span class="used">&euro;${(used / 100).toFixed(2)}</span><span class="sep">/</span><span class="total">&euro;${(limit / 100).toFixed(0)}</span>
-          </span>
-        </div>
-        <div class="progress-track"><div class="progress-fill ${tier}" style="width:${pct}%"></div></div>
-        <div class="credits-pct">${pct.toFixed(1)}%</div>
-      </div>`;
   }
 
   if (local) {
@@ -789,6 +794,18 @@ function measureExpandedHeight(panel: HTMLElement, targetWidth: number): number 
   document.body.removeChild(measure);
 
   return Math.min(EXPANDED_MAX_HEIGHT, Math.max(EXPANDED_MIN_HEIGHT, total));
+}
+
+// Re-measure the expanded panel content and resize the window to fit,
+// without repositioning. Use this after content height changes while the
+// panel is already open (e.g. settings toggle that adds/removes a row) —
+// repositioning would yank the panel back to the pill anchor and break
+// the user's drag-placed position.
+export async function refitExpandedHeight(): Promise<void> {
+  const panel = document.getElementById("expanded-view");
+  if (!panel) return;
+  const targetH = measureExpandedHeight(panel, EXPANDED_WIDTH);
+  await getCurrentWindow().setSize(new LogicalSize(EXPANDED_WIDTH, targetH));
 }
 
 export async function setViewState(state: ViewState, mode: SourceMode = 'claude'): Promise<void> {

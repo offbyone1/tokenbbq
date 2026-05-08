@@ -8,6 +8,7 @@ export interface ExtraUsage {
   monthly_limit: number | null;
   used_credits: number | null;
   utilization: number | null;
+  currency?: string | null;
 }
 
 export interface ClaudeUsageResponse {

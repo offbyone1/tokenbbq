@@ -292,9 +292,9 @@ body.view-transitioning {
    small dot, keeping the chrome quiet. */
 .hint-toast {
   position: absolute;
-  top: 50%;
+  top: 60px;
   left: 50%;
-  transform: translate(-50%, -50%) scale(0.4);
+  transform: translate(-50%, 0) scale(0.4);
   display: flex;
   align-items: center;
   gap: 9px;
@@ -373,7 +373,7 @@ body.view-transitioning {
 }
 .hint-toast.visible {
   opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
+  transform: translate(-50%, 0) scale(1);
 }
 .hint-dot {
   width: 6px;
@@ -586,6 +586,12 @@ body.view-transitioning {
   opacity: 0.7;
 }
 
+.usage-row-reset .infinity {
+  font-size: 13px;
+  line-height: 1;
+  vertical-align: -1px;
+}
+
 /* Progress bar */
 .progress-track {
   width: 100%;
@@ -604,25 +610,6 @@ body.view-transitioning {
 .progress-fill.green { background: var(--green); box-shadow: 0 0 8px var(--green-glow); }
 .progress-fill.orange { background: var(--orange); box-shadow: 0 0 8px var(--orange-glow); }
 .progress-fill.red { background: var(--red); box-shadow: 0 0 8px var(--red-glow); }
-
-/* Credits (inside usage-row now) */
-
-.credits-amount {
-  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-  font-size: 13px;
-}
-
-.credits-amount .used { color: var(--accent); font-weight: 500; }
-.credits-amount .sep { color: var(--text-tertiary); margin: 0 2px; }
-.credits-amount .total { color: var(--text-tertiary); font-weight: 400; }
-
-.credits-pct {
-  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-  font-size: 11px;
-  color: var(--text-tertiary);
-  margin-top: 4px;
-  text-align: right;
-}
 
 /* Error banner */
 .error-banner {
@@ -1042,19 +1029,6 @@ body.view-transitioning {
 .section-header-title {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-}
-
-.section-header-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.section-header-logo svg {
-  width: 11px;
-  height: 11px;
-  display: block;
 }
 
 .local-header-block {

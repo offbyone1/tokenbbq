@@ -1,11 +1,13 @@
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use tauri::{AppHandle, State};
 use tauri_plugin_store::StoreExt;
 
-use crate::api_types::{ClaudeUsageResponse, CodexUsage, LocalUsageSummary, Settings, SettingsDisplay, SourceSpend};
+use crate::api_types::{ClaudeUsageResponse, CodexUsage, ExtraUsage, LocalUsageSummary, Settings, SettingsDisplay, SourceSpend, WindowUsage};
 
 const USER_AGENT: &str = concat!("TokenBBQ-Widget/", env!("CARGO_PKG_VERSION"));
 
@@ -65,51 +67,259 @@ async fn keyring_set_async(key: String) -> Result<(), String> {
         .map_err(|e| format!("Task error: {}", e))?
 }
 
-async fn claude_get(client: &reqwest::Client, url: &str, session_key: &str) -> Result<reqwest::Response, String> {
+// === OAuth path (primary, since 0.6.x) ===
+//
+// Reads the OAuth access-token Claude Code stores in ~/.claude/.credentials.json,
+// POSTs `max_tokens=0` to api.anthropic.com/v1/messages, and parses the
+// `anthropic-ratelimit-unified-*` response headers. This eliminates the manual
+// sessionKey-paste flow entirely. Cost per refresh: ~8 input tokens against the
+// user's 5h plan window (Pro/Max), throttled to one call per 60s — sub-promille
+// drift on the displayed numbers.
+//
+// Surfaces it relies on:
+//   - .credentials.json schema (claudeAiOauth.accessToken) — undocumented
+//   - anthropic-ratelimit-unified-* response headers — undocumented
+// If either changes, the legacy sessionKey path below can be re-enabled.
+
+const OAUTH_TTL: Duration = Duration::from_secs(60);
+
+struct CachedUsage {
+    fetched_at: Instant,
+    response: ClaudeUsageResponse,
+}
+
+static OAUTH_CACHE: Mutex<Option<CachedUsage>> = Mutex::new(None);
+
+fn credentials_path() -> Option<PathBuf> {
+    // Honor CLAUDE_CONFIG_DIR like the TokenBBQ Claude loader does, so users
+    // with non-default install layouts still work.
+    if let Ok(custom) = std::env::var("CLAUDE_CONFIG_DIR") {
+        return Some(PathBuf::from(custom).join(".credentials.json"));
+    }
+    let home = std::env::var("HOME")
+        .ok()
+        .or_else(|| std::env::var("USERPROFILE").ok())?;
+    Some(PathBuf::from(home).join(".claude").join(".credentials.json"))
+}
+
+#[derive(serde::Deserialize)]
+struct CredentialsFile {
+    #[serde(rename = "claudeAiOauth")]
+    claude_ai_oauth: Option<ClaudeAiOauth>,
+}
+
+#[derive(serde::Deserialize)]
+struct ClaudeAiOauth {
+    #[serde(rename = "accessToken")]
+    access_token: String,
+}
+
+async fn read_oauth_token() -> Result<String, String> {
+    let path = credentials_path()
+        .ok_or("Could not resolve Claude credentials path (no HOME/USERPROFILE).")?;
+    let contents = tokio::fs::read_to_string(&path)
+        .await
+        .map_err(|e| {
+            format!(
+                "Could not read {}: {}. Run `claude auth login` to create it.",
+                path.display(),
+                e
+            )
+        })?;
+    let parsed: CredentialsFile = serde_json::from_str(&contents)
+        .map_err(|e| format!("Could not parse credentials file: {}", e))?;
+    parsed
+        .claude_ai_oauth
+        .ok_or_else(|| "credentials.json is missing claudeAiOauth section.".to_string())
+        .map(|o| o.access_token)
+}
+
+fn header_str(headers: &reqwest::header::HeaderMap, name: &str) -> Option<String> {
+    headers.get(name)?.to_str().ok().map(String::from)
+}
+
+fn parse_utilization_pct(raw: Option<String>) -> f64 {
+    raw.and_then(|v| v.parse::<f64>().ok())
+        .map(|v| (v * 100.0).clamp(0.0, 100.0))
+        .unwrap_or(0.0)
+}
+
+fn parse_unix_to_iso(raw: Option<String>) -> Option<String> {
+    let secs: i64 = raw?.parse().ok()?;
+    chrono::DateTime::<chrono::Utc>::from_timestamp(secs, 0).map(|dt| dt.to_rfc3339())
+}
+
+async fn fetch_via_oauth_headers(
+    client: &reqwest::Client,
+    token: &str,
+) -> Result<ClaudeUsageResponse, String> {
+    // Cheapest legal /v1/messages call: max_tokens=0 with a 1-char prompt.
+    // Empirically returns 200 with the full anthropic-ratelimit-unified-*
+    // header set; validation errors (400/404) and count_tokens do NOT include
+    // these headers, so we have to actually make a successful call.
+    let body = serde_json::json!({
+        "model": "claude-haiku-4-5",
+        "max_tokens": 0,
+        "messages": [{"role": "user", "content": "x"}]
+    });
+
     let resp = client
-        .get(url)
-        .header("Cookie", format!("sessionKey={}", session_key))
-        .header("Content-Type", "application/json")
+        .post("https://api.anthropic.com/v1/messages")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
         .header("User-Agent", USER_AGENT)
+        .json(&body)
         .send()
         .await
         .map_err(|e| format!("Network error: {}", e))?;
 
     let status = resp.status();
+    let headers = resp.headers().clone();
+    // Drain body without parsing — the rate-limit data lives in headers, the
+    // body itself is just the empty assistant response.
+    let _ = resp.bytes().await;
+
     if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
-        return Err("Session expired. Update your session key in Settings.".to_string());
+        return Err(
+            "OAuth token rejected. Run `claude auth login` to refresh credentials.".to_string(),
+        );
     }
     if !status.is_success() {
-        return Err(format!("API error: HTTP {}", status.as_u16()));
+        return Err(format!("Anthropic API error: HTTP {}", status.as_u16()));
     }
 
-    Ok(resp)
+    let five_h_util = header_str(&headers, "anthropic-ratelimit-unified-5h-utilization");
+    let five_h_reset = header_str(&headers, "anthropic-ratelimit-unified-5h-reset");
+    let seven_d_util = header_str(&headers, "anthropic-ratelimit-unified-7d-utilization");
+    let seven_d_reset = header_str(&headers, "anthropic-ratelimit-unified-7d-reset");
+    let overage_status = header_str(&headers, "anthropic-ratelimit-unified-overage-status");
+    let overage_util = header_str(&headers, "anthropic-ratelimit-unified-overage-utilization");
+
+    if five_h_util.is_none() && seven_d_util.is_none() {
+        return Err(
+            "Anthropic response missing unified rate-limit headers. The undocumented header schema may have changed."
+                .to_string(),
+        );
+    }
+
+    let five_hour = five_h_util.as_ref().map(|_| WindowUsage {
+        utilization: parse_utilization_pct(five_h_util.clone()),
+        resets_at: parse_unix_to_iso(five_h_reset),
+    });
+    let seven_day = seven_d_util.as_ref().map(|_| WindowUsage {
+        utilization: parse_utilization_pct(seven_d_util.clone()),
+        resets_at: parse_unix_to_iso(seven_d_reset),
+    });
+
+    // Overage = the existing extra_usage shape. Unified headers don't expose
+    // monthly_limit / used_credits / currency, so those stay None and the UI
+    // falls back to the unlimited-style display (utilization bar without a
+    // "$X / $Y" meta line). is_enabled tracks the overage-status header:
+    // "allowed" → enabled, anything else (or absent) → not enabled.
+    let extra_usage = overage_status.as_deref().filter(|s| !s.is_empty()).map(|s| ExtraUsage {
+        is_enabled: s == "allowed",
+        monthly_limit: None,
+        used_credits: None,
+        utilization: Some(parse_utilization_pct(overage_util)),
+        currency: None,
+    });
+
+    Ok(ClaudeUsageResponse {
+        five_hour,
+        seven_day,
+        extra_usage,
+    })
 }
 
 #[tauri::command]
-pub async fn fetch_usage(app: AppHandle, client: State<'_, reqwest::Client>) -> Result<ClaudeUsageResponse, String> {
-    let session_key = keyring_get_async()
-        .await?
-        .ok_or("No session key configured.")?;
-
-    let store = app.store("settings.json").map_err(|e| e.to_string())?;
-    let org_id = store
-        .get("org_id")
-        .and_then(|v| v.as_str().map(String::from))
-        .ok_or("No organization ID configured.")?;
-
-    if !is_valid_uuid(&org_id) {
-        return Err("Invalid organization ID format.".to_string());
+pub async fn fetch_usage(client: State<'_, reqwest::Client>) -> Result<ClaudeUsageResponse, String> {
+    // 60s cache — keeps quota consumption sub-promille even if the frontend
+    // polls every few seconds. Cache hit path is a single Mutex lock + clone.
+    if let Ok(guard) = OAUTH_CACHE.lock() {
+        if let Some(c) = guard.as_ref() {
+            if c.fetched_at.elapsed() < OAUTH_TTL {
+                return Ok(c.response.clone());
+            }
+        }
     }
 
-    let url = format!("https://claude.ai/api/organizations/{}/usage", org_id);
+    let token = read_oauth_token().await?;
+    let response = fetch_via_oauth_headers(&client, &token).await?;
 
-    claude_get(&client, &url, &session_key)
-        .await?
-        .json::<ClaudeUsageResponse>()
-        .await
-        .map_err(|e| format!("Parse error: {}", e))
+    if let Ok(mut guard) = OAUTH_CACHE.lock() {
+        *guard = Some(CachedUsage {
+            fetched_at: Instant::now(),
+            response: response.clone(),
+        });
+    }
+
+    Ok(response)
 }
+
+// === LEGACY sessionKey path (retained, commented out, as fallback) =========
+//
+// The pre-0.6 implementation called claude.ai/api/organizations/{org_id}/usage
+// using the user's manually-pasted sessionKey cookie + auto-detected org UUID.
+// It produced richer ExtraUsage data (monthly_limit, used_credits, currency)
+// that the unified-headers path cannot expose, but required a manual paste
+// from browser devtools and silently broke whenever Anthropic rotated the
+// cookie name or hardened CSRF.
+//
+// To re-enable (e.g. if Anthropic removes the unified-* headers or moves
+// .credentials.json into the OS keystore):
+//   1. Uncomment the `claude_get` helper and the body of `fetch_usage_via_session_key` below.
+//   2. Replace the body of `fetch_usage` above with:
+//          fetch_usage_via_session_key(app, client).await
+//      (and re-add `app: AppHandle` to its signature).
+//   3. Add `auto_detect_org` back to lib.rs's invoke_handler list if it was removed.
+//
+// /*
+// async fn claude_get(client: &reqwest::Client, url: &str, session_key: &str) -> Result<reqwest::Response, String> {
+//     let resp = client
+//         .get(url)
+//         .header("Cookie", format!("sessionKey={}", session_key))
+//         .header("Content-Type", "application/json")
+//         .header("User-Agent", USER_AGENT)
+//         .send()
+//         .await
+//         .map_err(|e| format!("Network error: {}", e))?;
+//
+//     let status = resp.status();
+//     if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+//         return Err("Session expired. Update your session key in Settings.".to_string());
+//     }
+//     if !status.is_success() {
+//         return Err(format!("API error: HTTP {}", status.as_u16()));
+//     }
+//
+//     Ok(resp)
+// }
+//
+// async fn fetch_usage_via_session_key(app: AppHandle, client: State<'_, reqwest::Client>) -> Result<ClaudeUsageResponse, String> {
+//     let session_key = keyring_get_async()
+//         .await?
+//         .ok_or("No session key configured.")?;
+//
+//     let store = app.store("settings.json").map_err(|e| e.to_string())?;
+//     let org_id = store
+//         .get("org_id")
+//         .and_then(|v| v.as_str().map(String::from))
+//         .ok_or("No organization ID configured.")?;
+//
+//     if !is_valid_uuid(&org_id) {
+//         return Err("Invalid organization ID format.".to_string());
+//     }
+//
+//     let url = format!("https://claude.ai/api/organizations/{}/usage", org_id);
+//
+//     claude_get(&client, &url, &session_key)
+//         .await?
+//         .json::<ClaudeUsageResponse>()
+//         .await
+//         .map_err(|e| format!("Parse error: {}", e))
+// }
+// */
 
 #[tauri::command]
 pub async fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
@@ -172,20 +382,27 @@ pub async fn load_settings(app: AppHandle) -> Result<SettingsDisplay, String> {
     })
 }
 
-#[tauri::command]
-pub async fn auto_detect_org(client: State<'_, reqwest::Client>, session_key: String) -> Result<String, String> {
-    if !is_valid_session_key(&session_key) {
-        return Err("Invalid session key format.".to_string());
-    }
-
-    let resp = claude_get(&client, "https://claude.ai/api/organizations", &session_key).await?;
-
-    let orgs: Vec<serde_json::Value> = resp.json().await.map_err(|e| e.to_string())?;
-
-    orgs.first()
-        .and_then(|o| o["uuid"].as_str().map(String::from))
-        .ok_or("No organizations found".to_string())
-}
+// auto_detect_org is part of the legacy sessionKey path. With the OAuth
+// fetch_usage primary, the org-id arrives via `anthropic-organization-id`
+// response header on every successful /v1/messages call, so detection is
+// implicit and this RPC is no longer needed. Kept commented as fallback.
+//
+// /*
+// #[tauri::command]
+// pub async fn auto_detect_org(client: State<'_, reqwest::Client>, session_key: String) -> Result<String, String> {
+//     if !is_valid_session_key(&session_key) {
+//         return Err("Invalid session key format.".to_string());
+//     }
+//
+//     let resp = claude_get(&client, "https://claude.ai/api/organizations", &session_key).await?;
+//
+//     let orgs: Vec<serde_json::Value> = resp.json().await.map_err(|e| e.to_string())?;
+//
+//     orgs.first()
+//         .and_then(|o| o["uuid"].as_str().map(String::from))
+//         .ok_or("No organizations found".to_string())
+// }
+// */
 
 /// Resolve how to invoke TokenBBQ's `scan` subcommand. Returns the program +
 /// argument list ready for std::process::Command. Resolution order:

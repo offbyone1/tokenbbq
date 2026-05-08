@@ -3,11 +3,10 @@ import { isEnabled, enable, disable } from "@tauri-apps/plugin-autostart";
 import { listen } from "@tauri-apps/api/event";
 import { availableMonitors, getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import type { ClaudeUsageResponse, LocalUsageSummary, Settings, SettingsDisplay } from "./types";
+import type { ClaudeUsageResponse, LocalUsageSummary, SettingsDisplay } from "./types";
 import { loadToggleState, saveToggleState, resolveMode, type SourceToggleState } from "./source-toggle";
-import { renderCompact, renderExpanded, renderError, renderLocalCompact, setViewState, getWorkAreaPhysical, currentFrameInsetLogical, clampWindowToWorkAreaOnce, refreshPillPositionIfPillMode, setMonitorWorkAreaPhysical } from "./ui";
+import { renderCompact, renderExpanded, renderError, renderLocalCompact, setViewState, getWorkAreaPhysical, currentFrameInsetLogical, clampWindowToWorkAreaOnce, refreshPillPositionIfPillMode, setMonitorWorkAreaPhysical, refitExpandedHeight } from "./ui";
 
-const SESSION_KEY_LIFETIME_MS = 28 * 24 * 60 * 60 * 1000;
 const LOCAL_POLL_INTERVAL_MS = 5 * 60 * 1000;
 // Persistent cache of the last successful fetchLocalUsage result. Codex /
 // local-AI scanning runs in a sidecar that takes ~2s on startup; without
@@ -148,19 +147,16 @@ async function init(): Promise<void> {
     renderLocalCompact(cached);
   }
 
-  const settings = await invoke<SettingsDisplay>("load_settings");
+  await invoke<SettingsDisplay>("load_settings");
   await refreshMonitorWorkArea();
 
-  if (settings.has_session_key) {
-    // Resync window size to compact in case a Vite hot-reload (or any prior
-    // state desync) left the window at expanded dimensions while the JS
-    // state booted in compact mode.
-    await setViewState("compact", currentMode());
-    startPolling();
-  } else {
-    await expand();
-    openSettings();
-  }
+  // OAuth path is primary: the widget reads ~/.claude/.credentials.json and
+  // pulls rate-limit headers from api.anthropic.com directly, so there's no
+  // first-run config gate. If the user hasn't run `claude auth login`, the
+  // first fetch_usage call surfaces a guidance error in the pill and the
+  // user can open settings via the gear icon.
+  await setViewState("compact", currentMode());
+  startPolling();
 
   const win = getCurrentWindow();
   win.onCloseRequested(async (event) => {
@@ -192,6 +188,8 @@ async function init(): Promise<void> {
 // they figure it out".
 const DBLCLICK_HINT_KEY = "tokenbbq-dblclick-hint-count";
 const DBLCLICK_HINT_MAX = 2;
+// TEMP: dev-only — clear counter so the toast shows again after reload.
+localStorage.removeItem(DBLCLICK_HINT_KEY);
 // Wait for the panel's own expand animation to settle before springing the
 // hint in — otherwise the two motions overlap and the hint reads as instant.
 const DBLCLICK_HINT_DELAY_MS = 450;
@@ -249,73 +247,35 @@ async function openSettings(): Promise<void> {
   currentView = "settings";
   setViewState("settings");
 
-  try {
-    const settings = await invoke<SettingsDisplay>("load_settings");
-    const keyInput = document.getElementById("session-key-input") as HTMLInputElement;
-    if (settings.session_key)
-      keyInput.value = settings.session_key;
-    else
-      keyInput.value = "";
-    if (settings.org_id)
-      (document.getElementById("org-id-input") as HTMLInputElement).value = settings.org_id;
-
-    if (settings.saved_at) {
-      const expiresAt = settings.saved_at * 1000 + SESSION_KEY_LIFETIME_MS;
-      const daysLeft = Math.max(0, Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000)));
-      const el = document.getElementById("import-status")!;
-      if (daysLeft <= 5) {
-        el.textContent = `Session key expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`;
-        el.className = "import-status error";
-      } else {
-        el.textContent = `Session key valid for ~${daysLeft} days.`;
-        el.className = "import-status success";
-      }
-    }
-  } catch {}
+  // Legacy sessionKey-form prefill / expiry-warning logic removed alongside
+  // the form itself. With the OAuth path active there's nothing per-user to
+  // populate here — autostart/theme/extra-usage toggles handle their own
+  // state. See commands.rs for the matching backend toggles to re-enable.
 }
 
 function closeSettings(): void {
   currentView = "expanded";
   document.getElementById("settings-overlay")!.classList.remove("visible");
+  // Settings can mutate panel content height (e.g. toggling Extra Usage);
+  // refit-only so we don't yank the window back to the pill anchor if the
+  // user dragged it.
+  refitExpandedHeight().catch(() => {});
 }
 
 async function saveSettings(): Promise<void> {
-  const sessionKey = (document.getElementById("session-key-input") as HTMLInputElement).value.trim() || null;
-  let orgId = (document.getElementById("org-id-input") as HTMLInputElement).value.trim() || null;
+  // OAuth path needs no per-user form input — autostart / theme / extra-usage
+  // toggles persist independently. "Save" now just closes the overlay and
+  // forces a fresh fetch in case the user just ran `claude auth login` in
+  // another terminal.
+  closeSettings();
+  startPolling();
 
-  const statusEl = document.getElementById("import-status")!;
-
-  // Session key required on first setup; subsequent saves can omit it to keep existing key
-  const currentSettings = await invoke<SettingsDisplay>("load_settings");
-  if (!sessionKey && !currentSettings.has_session_key) {
-    statusEl.textContent = "Session key is required.";
-    statusEl.className = "import-status error";
-    return;
-  }
-
-  if (!orgId && sessionKey) {
-    statusEl.textContent = "Detecting organization...";
-    statusEl.className = "import-status loading";
-    try {
-      orgId = await invoke<string>("auto_detect_org", { sessionKey });
-      (document.getElementById("org-id-input") as HTMLInputElement).value = orgId;
-    } catch (e) {
-      statusEl.textContent = "Could not detect Org ID: " + String(e);
-      statusEl.className = "import-status error";
-      return;
-    }
-  }
-
-  try {
-    await invoke("save_settings", {
-      settings: { session_key: sessionKey, org_id: orgId },
-    });
-    closeSettings();
-    startPolling();
-  } catch (e) {
-    statusEl.textContent = String(e);
-    statusEl.className = "import-status error";
-  }
+  // Legacy sessionKey-form save logic removed alongside the form itself.
+  // To re-enable the sessionKey path, restore from git history:
+  //   - this function's old body (sessionKey/orgId reads + auto_detect_org + save_settings RPC)
+  //   - openSettings() form prefill + expiry warning
+  //   - the commented-out HTML form in index.html
+  //   - the commented-out backend handlers in commands.rs / lib.rs
 }
 
 // --- Drag & Events ---
@@ -581,6 +541,23 @@ function setupEventListeners(): void {
     const theme = themeToggle.checked ? "light" : "dark";
     applyTheme(theme);
     localStorage.setItem("tokenbbq-theme", theme);
+  });
+
+  // Show Extra Usage row (off by default — many users have no monthly cap
+  // configured, in which case the row reads "€x / ∞" and is just noise).
+  const extraToggle = document.getElementById("extra-usage-toggle") as HTMLInputElement;
+  extraToggle.checked = localStorage.getItem("tokenbbq-show-extra-usage") === "1";
+  extraToggle.addEventListener("change", () => {
+    localStorage.setItem("tokenbbq-show-extra-usage", extraToggle.checked ? "1" : "0");
+    if (lastUsageJson) {
+      try {
+        const usage = JSON.parse(lastUsageJson) as ClaudeUsageResponse;
+        renderExpanded(usage, lastLocal, toggleState);
+        // The user is in the settings overlay; the underlying panel just
+        // grew/shrunk by one row. Defer resizing to closeSettings so we
+        // don't yank window dimensions out from under their interaction.
+      } catch {}
+    }
   });
 }
 
