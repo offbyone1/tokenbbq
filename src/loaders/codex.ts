@@ -1,9 +1,9 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { glob } from 'tinyglobby';
-import type { UnifiedTokenEvent } from '../types.js';
+import type { UnifiedTokenEvent, CodexRateLimits, CodexWindowUsage } from '../types.js';
 import { isValidTimestamp } from '../types.js';
 import { resolveProjectRoot } from '../project.js';
 
@@ -138,9 +138,7 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 				raw = subtractUsage(totalUsage, prevTotals);
 			}
 			prevTotals = totalUsage;
-			if (raw.input === 0 && raw.output === 0 && raw.cached === 0) continue;
-
-			if (raw.input === 0 && raw.output === 0) continue;
+			if (raw.input === 0 && raw.output === 0 && raw.cached === 0 && raw.reasoning === 0) continue;
 
 			const extracted = extractModel({ ...payload, info });
 			if (extracted) currentModel = extracted;
@@ -151,7 +149,10 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 			// cache. Storing both verbatim double-counts cache reads inside
 			// `input`. Split them so `tokens.input` is fresh-input only — matches
 			// the semantics of every other loader (Claude Code, Gemini, etc.).
-			const freshInput = Math.max(raw.input - raw.cached, 0);
+			// Math.min clamps against the rare case where a malformed entry
+			// reports cached > input (would otherwise produce negative freshInput).
+			const cachedInput = Math.min(raw.cached, raw.input);
+			const freshInput = Math.max(raw.input - cachedInput, 0);
 			events.push({
 				source: 'codex',
 				timestamp,
@@ -161,7 +162,7 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 					input: freshInput,
 					output: raw.output,
 					cacheCreation: 0,
-					cacheRead: raw.cached,
+					cacheRead: cachedInput,
 					reasoning: raw.reasoning,
 				},
 				costUSD: 0,
@@ -172,4 +173,91 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 
 	events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 	return events;
+}
+
+function parseRateLimitWindow(raw: unknown): CodexWindowUsage | null {
+	if (!raw || typeof raw !== 'object') return null;
+	const r = raw as Record<string, unknown>;
+	const used = typeof r.used_percent === 'number' ? r.used_percent : null;
+	const windowMin = typeof r.window_minutes === 'number' ? r.window_minutes : null;
+	const resetsUnix = typeof r.resets_at === 'number' ? r.resets_at : null;
+	if (used === null || windowMin === null) return null;
+	const resetsAtMs = resetsUnix !== null ? resetsUnix * 1000 : null;
+	// If the snapshot's reset time is already in the past, the rolling
+	// window has rolled over since Codex last wrote rate-limits to disk.
+	// Codex only persists rate-limits when it makes an API call, so a
+	// quiet user can have an arbitrarily old snapshot. Treat as 0% used
+	// — closer to truth than the stale (often near-100%) saved value,
+	// and matches what `codex /status` shows live in this case.
+	const isStale = resetsAtMs !== null && resetsAtMs < Date.now();
+	return {
+		utilization: isStale ? 0 : used,
+		windowMinutes: windowMin,
+		resetsAt: isStale ? null : (resetsAtMs !== null ? new Date(resetsAtMs).toISOString() : null),
+	};
+}
+
+/**
+ * Read the most recent rate_limits snapshot Codex has written to its
+ * session JSONL files. Returns null when:
+ *   - no Codex installation is detected
+ *   - no session contains a rate_limits-bearing event
+ * Sessions are scanned newest-first (by mtime); the LAST rate_limits
+ * entry within the newest session that contains one wins.
+ */
+export async function loadCodexRateLimits(): Promise<CodexRateLimits | null> {
+	const codexDir = getCodexDir();
+	if (!codexDir) return null;
+
+	const sessionsDir = path.join(codexDir, 'sessions');
+	const files = await glob('**/*.jsonl', { cwd: sessionsDir, absolute: true });
+	if (files.length === 0) return null;
+
+	const withMtime = await Promise.all(files.map(async (file) => {
+		const s = await stat(file);
+		return { path: file, mtimeMs: s.mtimeMs };
+	}));
+
+	withMtime.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+	for (const { path: file } of withMtime) {
+		let content: string;
+		try {
+			content = await readFile(file, 'utf-8');
+		} catch {
+			continue;
+		}
+
+		let lastSnapshot: CodexRateLimits | null = null;
+		for (const line of content.split(/\r?\n/)) {
+			const trimmed = line.trim();
+			if (!trimmed) continue;
+
+			let entry: Record<string, unknown>;
+			try {
+				entry = JSON.parse(trimmed);
+			} catch {
+				continue;
+			}
+
+			if (entry.type !== 'event_msg') continue;
+			const payload = entry.payload as Record<string, unknown> | undefined;
+			if (!payload || payload.type !== 'token_count') continue;
+			const rl = payload.rate_limits as Record<string, unknown> | undefined;
+			if (!rl) continue;
+			const ts = typeof entry.timestamp === 'string' ? entry.timestamp : null;
+			if (!isValidTimestamp(ts)) continue;
+
+			lastSnapshot = {
+				planType: typeof rl.plan_type === 'string' ? rl.plan_type : null,
+				primary: parseRateLimitWindow(rl.primary),
+				secondary: parseRateLimitWindow(rl.secondary),
+				snapshotAt: ts,
+			};
+		}
+
+		if (lastSnapshot) return lastSnapshot;
+	}
+
+	return null;
 }

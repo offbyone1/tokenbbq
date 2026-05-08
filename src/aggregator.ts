@@ -13,6 +13,7 @@ import type {
 	HeatmapCell,
 	DashboardData,
 	Source,
+	CodexRateLimits,
 } from './types.js';
 import { emptyTokens, addTokens, totalTokenCount, isValidTimestamp } from './types.js';
 
@@ -366,7 +367,10 @@ export function aggregateHeatmap(events: UnifiedTokenEvent[]): HeatmapCell[] {
 	return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export function buildDashboardData(events: UnifiedTokenEvent[]): DashboardData {
+export function buildDashboardData(
+	events: UnifiedTokenEvent[],
+	codexRateLimits: CodexRateLimits | null = null,
+): DashboardData {
 	// Drop events with malformed timestamps at the pipeline boundary so
 	// `dateKey`/`monthKey` (which call `new Date(ts).toISOString()`) can't
 	// throw RangeError("Invalid time value") and take down the whole render.
@@ -417,5 +421,6 @@ export function buildDashboardData(events: UnifiedTokenEvent[]): DashboardData {
 		bySourceModel,
 		byProject,
 		heatmap,
+		codexRateLimits,
 	};
 }

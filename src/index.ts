@@ -8,6 +8,7 @@ import { startServer } from './server.js';
 import { startToolWatcher } from './watcher.js';
 import { printDailyTable, printMonthlyTable, printSummary } from './cli-output.js';
 import { loadStore, appendEvents, type StoreState } from './store.js';
+import { mergeFreshSourceEvents } from './event-merge.js';
 
 function parseArgs(argv: string[]) {
 	const args = argv.slice(2);
@@ -106,8 +107,14 @@ async function main(): Promise<void> {
 	log(pc.dim('  Scanning for AI tool usage data...\n'));
 
 	const store: StoreState = loadStore();
-	const { events: scanned, detected, errors } = await loadAll(json);
-	const added = appendEvents(store, scanned);
+	const { events: scanned, detected, errors, codexRateLimits } = await loadAll(json);
+	// Codex emits cumulative-total events that we re-derive deltas from on
+	// every scan; persisting them double-counts on the next run. Persist
+	// every other source as before, and merge fresh codex events on top
+	// of the store at read time only.
+	const persistable = scanned.filter((e) => e.source !== 'codex');
+	const added = appendEvents(store, persistable);
+	let workingEvents = mergeFreshSourceEvents(store.events, scanned, ['codex']);
 
 	// Surface loader failures rather than silently dropping them. In JSON
 	// mode (incl. `scan`) we route to stderr so structured stdout stays
@@ -116,11 +123,11 @@ async function main(): Promise<void> {
 		console.error(pc.yellow(`  warn: loader '${e.source}' failed: ${e.error}`));
 	}
 
-	if (store.events.length === 0) {
+	if (workingEvents.length === 0) {
 		// In JSON mode (incl. `scan`) emit a valid empty DashboardData rather than
 		// returning silently — embedders can then unconditionally JSON.parse stdout.
 		if (json) {
-			await writeJsonAndExit(buildDashboardData([]));
+			await writeJsonAndExit(buildDashboardData([], codexRateLimits));
 			return;
 		}
 		console.error(pc.yellow('\n  No usage data found.'));
@@ -129,11 +136,11 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	log(pc.dim(`\n  Total: ${store.events.length.toLocaleString()} events in store (+ ${added.length} new from ${detected.length} source(s))\n`));
+	log(pc.dim(`\n  Total: ${workingEvents.length.toLocaleString()} events (+ ${added.length} new persisted from ${detected.length} source(s))\n`));
 	log(pc.dim('  Calculating costs...'));
-	await enrichCosts(store.events);
+	await enrichCosts(workingEvents);
 
-	const data = buildDashboardData(store.events);
+	const data = buildDashboardData(workingEvents, codexRateLimits);
 
 	if (json) {
 		await writeJsonAndExit(data);
@@ -141,10 +148,12 @@ async function main(): Promise<void> {
 	}
 
 	const reloadDashboardData = async () => {
-		const { events: fresh } = await loadAll(true);
-		const addedNow = appendEvents(store, fresh);
+		const { events: fresh, codexRateLimits: freshLimits } = await loadAll(true);
+		const addedNow = appendEvents(store, fresh.filter((e) => e.source !== 'codex'));
+		workingEvents = mergeFreshSourceEvents(store.events, fresh, ['codex']);
 		if (addedNow.length > 0) await enrichCosts(addedNow);
-		return buildDashboardData(store.events);
+		await enrichCosts(workingEvents.filter((e) => e.source === 'codex'));
+		return buildDashboardData(workingEvents, freshLimits);
 	};
 
 	switch (command) {

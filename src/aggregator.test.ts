@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { aggregateByProject, buildDashboardData } from './aggregator.js';
-import { isValidTimestamp, type UnifiedTokenEvent } from './types.js';
+import { isValidTimestamp, type UnifiedTokenEvent, type CodexRateLimits } from './types.js';
 
 function ev(over: Partial<UnifiedTokenEvent> = {}): UnifiedTokenEvent {
   return {
@@ -121,5 +121,23 @@ describe('buildDashboardData timestamp safety', () => {
     assert.equal(out.totals.eventCount, 1);
     assert.equal(out.daily.length, 1);
     assert.equal(out.daily[0].date, '2026-04-20');
+  });
+});
+
+describe('buildDashboardData codexRateLimits', () => {
+  test('passes through codexRateLimits unchanged when provided', () => {
+    const limits: CodexRateLimits = {
+      planType: 'plus',
+      primary: { utilization: 38, windowMinutes: 300, resetsAt: '2026-04-30T05:57:23.000Z' },
+      secondary: { utilization: 11, windowMinutes: 10080, resetsAt: '2026-05-06T09:17:38.000Z' },
+      snapshotAt: '2026-04-30T01:38:47.383Z',
+    };
+    const out = buildDashboardData([], limits);
+    assert.equal(out.codexRateLimits, limits);
+  });
+
+  test('defaults codexRateLimits to null when omitted', () => {
+    const out = buildDashboardData([]);
+    assert.equal(out.codexRateLimits, null);
   });
 });

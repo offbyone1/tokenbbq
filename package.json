@@ -42,13 +42,13 @@
 		"node": ">=20"
 	},
 	"scripts": {
-		"build": "node scripts/inline-wasm.mjs && tsdown && node -e \"require('fs').renameSync('dist/index.mjs','dist/index.js')\"",
-		"dev": "node scripts/inline-wasm.mjs && node --import tsx src/index.ts",
+		"build": "node scripts/inline-wasm.mjs && node scripts/inline-dashboard-icon.mjs && tsdown && node -e \"require('fs').renameSync('dist/index.mjs','dist/index.js')\"",
+		"dev": "node scripts/inline-wasm.mjs && node scripts/inline-dashboard-icon.mjs && node --import tsx src/index.ts",
 		"start": "node dist/index.js",
-		"lint": "node scripts/inline-wasm.mjs && tsc --noEmit",
-		"test": "node scripts/run-tests.mjs",
+		"lint": "node scripts/inline-wasm.mjs && node scripts/inline-dashboard-icon.mjs && tsc --noEmit",
+		"test": "node scripts/inline-dashboard-icon.mjs && node scripts/run-tests.mjs",
 		"prepublishOnly": "npm run build",
-		"build:sidecar": "node scripts/inline-wasm.mjs && node scripts/build-sidecar.mjs",
+		"build:sidecar": "node scripts/inline-wasm.mjs && node scripts/inline-dashboard-icon.mjs && node scripts/build-sidecar.mjs",
 		"widget:install": "npm install --prefix widget",
 		"widget:dev": "node scripts/build-sidecar.mjs --skip-if-no-bun && npm run --prefix widget tauri dev",
 		"widget:build": "npm run build && npm run build:sidecar && npm run --prefix widget tauri build"

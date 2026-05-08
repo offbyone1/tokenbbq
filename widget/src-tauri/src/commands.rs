@@ -5,7 +5,7 @@ use std::os::windows::process::CommandExt;
 use tauri::{AppHandle, State};
 use tauri_plugin_store::StoreExt;
 
-use crate::api_types::{ClaudeUsageResponse, LocalUsageSummary, Settings, SettingsDisplay, SourceSpend};
+use crate::api_types::{ClaudeUsageResponse, CodexUsage, LocalUsageSummary, Settings, SettingsDisplay, SourceSpend};
 
 const USER_AGENT: &str = concat!("TokenBBQ-Widget/", env!("CARGO_PKG_VERSION"));
 
@@ -431,12 +431,25 @@ pub async fn fetch_local_usage() -> Result<LocalUsageSummary, String> {
         _ => Vec::new(),
     };
 
+    // Schema-drift safety: log on deserialization failure rather than
+    // silently swallowing — otherwise a sidecar shape change would
+    // produce a `null` Codex toggle in the widget with no clue why.
+    let codex_usage: Option<CodexUsage> = raw
+        .get("codexRateLimits")
+        .and_then(|v| if v.is_null() { None } else { Some(v.clone()) })
+        .and_then(|v| {
+            serde_json::from_value::<CodexUsage>(v)
+                .map_err(|e| eprintln!("tokenbbq-widget: codexRateLimits deserialize failed: {e}"))
+                .ok()
+        });
+
     Ok(LocalUsageSummary {
         generated,
         today_date,
         today_tokens,
         week_tokens,
         today_by_source,
+        codex_usage,
     })
 }
 
