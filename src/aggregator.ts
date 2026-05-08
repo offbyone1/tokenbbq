@@ -30,12 +30,23 @@ export const SOURCE_ORDER: Source[] = [
 	'pi',
 ];
 
+// Bucket by *local* calendar day/month, not UTC. `toISOString().slice(0,10)`
+// drops events that happened after local midnight onto the previous day for
+// any user east of UTC and onto the next day for users west — heatmap and
+// daily totals were silently shifted by one bucket. The local-time getters
+// produce the same calendar date the user would write down for the event.
+function pad2(n: number): string {
+	return n < 10 ? '0' + n : String(n);
+}
+
 function dateKey(timestamp: string): string {
-	return new Date(timestamp).toISOString().slice(0, 10);
+	const d = new Date(timestamp);
+	return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
 }
 
 function monthKey(timestamp: string): string {
-	return new Date(timestamp).toISOString().slice(0, 7);
+	const d = new Date(timestamp);
+	return d.getFullYear() + '-' + pad2(d.getMonth() + 1);
 }
 
 function unique<T>(arr: T[]): T[] {
