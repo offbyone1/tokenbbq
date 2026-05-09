@@ -1,3 +1,4 @@
+import "./dev-overlay";
 import { invoke } from "@tauri-apps/api/core";
 import { isEnabled, enable, disable } from "@tauri-apps/plugin-autostart";
 import { listen } from "@tauri-apps/api/event";

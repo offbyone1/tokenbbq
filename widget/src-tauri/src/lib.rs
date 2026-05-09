@@ -61,6 +61,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             commands::fetch_usage,
             commands::save_settings,
@@ -92,7 +93,7 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &refresh, &quit])?;
 
-            TrayIconBuilder::new()
+            TrayIconBuilder::with_id("main")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .tooltip("TokenBBQ")

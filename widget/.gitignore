@@ -8,3 +8,8 @@ src-tauri/binaries/*
 .env
 *.log
 app-icon.png
+
+# Drop target for the private dev-overlay build (filled by tokenbbq-dev/scripts/build-dev-widget.mjs).
+# The hook in src/dev-overlay.ts only loads this file when VITE_TOKENBBQ_DEV_OVERLAY is set at
+# build time, so production builds are unaffected.
+public/tokenbbq-dev-overlay.js
