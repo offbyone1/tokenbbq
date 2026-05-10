@@ -638,7 +638,8 @@ body.view-transitioning {
   padding: 0 14px 14px;
 }
 
-.settings-footer .footer-btn {
+.settings-footer .footer-btn,
+.update-actions .footer-btn {
   flex: 1;
   height: 34px;
   border-radius: 9px;
@@ -656,19 +657,22 @@ body.view-transitioning {
   gap: 5px;
 }
 
-.settings-footer .footer-btn:hover {
+.settings-footer .footer-btn:hover,
+.update-actions .footer-btn:hover {
   background: var(--card-elevated);
   border-color: var(--accent);
   color: var(--text-primary);
 }
 
-.settings-footer .footer-btn.primary {
+.settings-footer .footer-btn.primary,
+.update-actions .footer-btn.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
 }
 
-.settings-footer .footer-btn.primary:hover {
+.settings-footer .footer-btn.primary:hover,
+.update-actions .footer-btn.primary:hover {
   background: #d06b28;
   box-shadow: 0 0 16px var(--accent-glow);
 }
@@ -877,6 +881,40 @@ body.view-transitioning {
 .theme-label.active {
   color: var(--text-primary);
   font-weight: 500;
+}
+
+.update-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.update-actions .footer-btn {
+  flex: 1;
+  height: 28px;
+}
+
+.update-actions .footer-btn[hidden] {
+  display: none;
+}
+
+.update-status {
+  min-height: 18px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.update-status.success {
+  color: var(--green);
+}
+
+.update-status.error {
+  color: var(--red);
+}
+
+.update-status.loading {
+  color: var(--text-secondary);
 }
 
 .theme-switch {

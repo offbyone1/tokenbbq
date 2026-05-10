@@ -6,6 +6,7 @@ import type { LoaderOptions } from './index.js';
 import { resolveProjectRoot } from '../project.js';
 import { getPlatformDataDirs } from '../platform-paths.js';
 import { SQL_WASM_BASE64 } from './sql-wasm-inline.js';
+import { loadCachedFileEvents } from './cache.js';
 
 // sql.js's default loader fopen()s `sql-wasm.wasm` from the path Emscripten
 // recorded at sql.js build time. After Bun --compile (or any other deploy
@@ -48,7 +49,12 @@ export async function loadOpenCodeEvents(opts: LoaderOptions = { quiet: false })
   if (!dir) return [];
   const dbFile = path.join(dir, 'opencode.db');
   const warn = opts.quiet ? () => {} : console.warn.bind(console);
+  const cached = await loadCachedFileEvents('opencode', [dbFile], async () => parseOpenCodeDb(dbFile, warn));
+  cached.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  return cached;
+}
 
+async function parseOpenCodeDb(dbFile: string, warn: (...args: unknown[]) => void): Promise<UnifiedTokenEvent[]> {
   let SQL: Awaited<ReturnType<typeof initSqlJs>>;
   try {
     SQL = await initSqlJs({ wasmBinary: SQL_WASM_BINARY });

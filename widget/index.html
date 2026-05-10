@@ -154,6 +154,22 @@
           </div>
 
           <div class="theme-toggle-row">
+            <label class="field-label">Automatic update checks</label>
+            <div class="theme-switch-wrap">
+              <label class="theme-switch">
+                <input type="checkbox" id="auto-update-toggle" />
+                <span class="theme-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="update-actions">
+            <button class="footer-btn" id="btn-check-updates" type="button">Check for updates</button>
+            <button class="footer-btn primary" id="btn-install-update" type="button" hidden>Install update</button>
+          </div>
+          <div id="update-status" class="update-status"></div>
+
+          <div class="theme-toggle-row">
             <label class="field-label">Theme</label>
             <div class="theme-switch-wrap">
               <span class="theme-label" id="theme-label-dark">Dark</span>

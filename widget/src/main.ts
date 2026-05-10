@@ -6,6 +6,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { ClaudeUsageResponse, LocalUsageSummary, SettingsDisplay } from "./types";
 import { loadToggleState, saveToggleState, resolveMode, type SourceToggleState } from "./source-toggle";
 import { renderCompact, renderExpanded, renderError, renderLocalCompact, setViewState, getWorkAreaPhysical, currentFrameInsetLogical, clampWindowToWorkAreaOnce, refreshPillPositionIfPillMode, setMonitorWorkAreaPhysical, refitExpandedHeight } from "./ui";
+import { scheduleAutoUpdateCheck, setupUpdateControls } from "./update";
 
 const LOCAL_POLL_INTERVAL_MS = 5 * 60 * 1000;
 // Persistent cache of the last successful fetchLocalUsage result. Codex /
@@ -157,6 +158,7 @@ async function init(): Promise<void> {
   // user can open settings via the gear icon.
   await setViewState("compact", currentMode());
   startPolling();
+  scheduleAutoUpdateCheck();
 
   const win = getCurrentWindow();
   win.onCloseRequested(async (event) => {
@@ -469,6 +471,7 @@ function setupEventListeners(): void {
   document.getElementById("btn-save-settings")!.addEventListener("click", saveSettings);
   document.getElementById("btn-cancel-settings")!.addEventListener("click", closeSettings);
   document.getElementById("btn-cancel-settings-2")!.addEventListener("click", closeSettings);
+  setupUpdateControls();
 
   // Delegated: the button is re-rendered with the expanded panel on every
   // refresh, so a static handle would go stale.

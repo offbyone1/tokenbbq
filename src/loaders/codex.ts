@@ -6,6 +6,7 @@ import { glob } from 'tinyglobby';
 import type { UnifiedTokenEvent, CodexRateLimits, CodexWindowUsage } from '../types.js';
 import { isValidTimestamp } from '../types.js';
 import { resolveProjectRoot } from '../project.js';
+import { loadCachedFileEvents } from './cache.js';
 
 const HOME = homedir();
 const FALLBACK_MODEL = 'gpt-5';
@@ -79,15 +80,14 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 
 	const sessionsDir = path.join(codexDir, 'sessions');
 	const files = await glob('**/*.jsonl', { cwd: sessionsDir, absolute: true });
-	const events: UnifiedTokenEvent[] = [];
-
-	for (const file of files) {
+	const events = await loadCachedFileEvents('codex', files, async (file) => {
+		const events: UnifiedTokenEvent[] = [];
 		const sessionId = path.relative(sessionsDir, file).replace(/\.jsonl$/i, '').replace(/\\/g, '/');
 		let content: string;
 		try {
 			content = await readFile(file, 'utf-8');
 		} catch {
-			continue;
+			return events;
 		}
 
 		let prevTotals: RawUsage | null = null;
@@ -169,7 +169,8 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 				project: sessionProject,
 			});
 		}
-	}
+		return events;
+	});
 
 	events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 	return events;

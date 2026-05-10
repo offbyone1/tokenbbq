@@ -30,6 +30,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["nsis", "msi", "dmg", "app"],
     "icon": [
       "icons/32x32.png",
@@ -43,5 +44,15 @@
       "minimumSystemVersion": "11.0"
     }
   },
-  "plugins": {}
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNGN0Y2M0Y1RDRFQ0YxRjgKUldUNDhlelU5V04vUHp3ZnNaNTNSV3NsMHUxbWFTcW92YS92aDVzYncvMmhIRnBiTGc5S2RxalIK",
+      "endpoints": [
+        "https://github.com/offbyone1/tokenbbq/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
 }

@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { homedir, hostname } from 'node:os';
 import path from 'node:path';
@@ -21,6 +21,10 @@ export function getStoreDir(): string {
 
 function getEventsDir(): string {
   return path.join(getStoreDir(), 'events');
+}
+
+function getStoreCachePath(): string {
+  return path.join(getStoreDir(), 'cache', 'store-v1.json');
 }
 
 function sanitizeForFilename(s: string): string {
@@ -64,6 +68,123 @@ interface LoadOutcome {
   hashes: Set<string>;
   badSeen: number;
   futureSeen: number;
+}
+
+interface StoreFileMeta {
+  path: string;
+  mtimeMs: number;
+  size: number;
+}
+
+interface StoreReadCache {
+  v: number;
+  files: StoreFileMeta[];
+  events: UnifiedTokenEvent[];
+}
+
+function fileMeta(file: string): StoreFileMeta | null {
+  try {
+    const s = statSync(file);
+    if (!s.isFile() || s.size === 0) return null;
+    return { path: file, mtimeMs: s.mtimeMs, size: s.size };
+  } catch {
+    return null;
+  }
+}
+
+function listStoreFiles(eventsDir: string): StoreFileMeta[] {
+  const files: StoreFileMeta[] = [];
+  const legacy = fileMeta(getLegacyFilePath());
+  if (legacy) files.push(legacy);
+
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(eventsDir);
+  } catch {
+    // ignore - fresh install with empty dir
+  }
+
+  for (const name of entries) {
+    if (!name.endsWith('.ndjson')) continue;
+    const meta = fileMeta(path.join(eventsDir, name));
+    if (meta) files.push(meta);
+  }
+
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  return files;
+}
+
+function sameFileSet(a: StoreFileMeta[], b: StoreFileMeta[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i]!.path !== b[i]!.path || a[i]!.mtimeMs !== b[i]!.mtimeMs || a[i]!.size !== b[i]!.size) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isTokenCounts(v: unknown): v is UnifiedTokenEvent['tokens'] {
+  if (!v || typeof v !== 'object') return false;
+  const t = v as Record<string, unknown>;
+  return (
+    typeof t.input === 'number' &&
+    typeof t.output === 'number' &&
+    typeof t.cacheCreation === 'number' &&
+    typeof t.cacheRead === 'number' &&
+    typeof t.reasoning === 'number'
+  );
+}
+
+function isStoreEvent(v: unknown): v is UnifiedTokenEvent {
+  if (!v || typeof v !== 'object') return false;
+  const e = v as Record<string, unknown>;
+  return (
+    typeof e.source === 'string' &&
+    typeof e.timestamp === 'string' &&
+    typeof e.sessionId === 'string' &&
+    typeof e.model === 'string' &&
+    isTokenCounts(e.tokens) &&
+    typeof e.costUSD === 'number'
+  );
+}
+
+function outcomeFromEvents(events: UnifiedTokenEvent[]): LoadOutcome {
+  const outcome: LoadOutcome = { events: [], hashes: new Set(), badSeen: 0, futureSeen: 0 };
+  for (const event of events) {
+    const hash = hashEvent(event);
+    if (outcome.hashes.has(hash)) continue;
+    outcome.hashes.add(hash);
+    outcome.events.push(event);
+  }
+  return outcome;
+}
+
+function readStoreCache(files: StoreFileMeta[]): LoadOutcome | null {
+  try {
+    const parsed = JSON.parse(readFileSync(getStoreCachePath(), 'utf-8')) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const cache = parsed as StoreReadCache;
+    if (cache.v !== CURRENT_VERSION || !Array.isArray(cache.files) || !Array.isArray(cache.events)) return null;
+    if (!sameFileSet(cache.files, files)) return null;
+    if (!cache.events.every(isStoreEvent)) return null;
+    return outcomeFromEvents(cache.events);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoreCache(files: StoreFileMeta[], events: UnifiedTokenEvent[]): void {
+  const target = getStoreCachePath();
+  const dir = path.dirname(target);
+  const tmp = path.join(dir, `${path.basename(target)}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(tmp, JSON.stringify({ v: CURRENT_VERSION, files, events }), 'utf-8');
+    renameSync(tmp, target);
+  } catch {
+    // Performance-only cache. Store reads must keep working if this fails.
+  }
 }
 
 function loadFile(file: string, into: LoadOutcome): void {
@@ -141,6 +262,10 @@ export function loadStore(): StoreState {
   if (!existsSync(eventsDir)) mkdirSync(eventsDir, { recursive: true });
   if (!existsSync(ownFile)) appendFileSync(ownFile, '');
 
+  const files = listStoreFiles(eventsDir);
+  const cached = readStoreCache(files);
+  if (cached) return { events: cached.events, hashes: cached.hashes, path: ownFile };
+
   const outcome: LoadOutcome = {
     events: [],
     hashes: new Set(),
@@ -171,6 +296,7 @@ export function loadStore(): StoreState {
   if (outcome.badSeen > 0) console.warn(`tokenbbq: skipped ${outcome.badSeen} malformed line(s) in store`);
   if (outcome.futureSeen > 0) console.warn(`tokenbbq: skipped ${outcome.futureSeen} line(s) with future schema version`);
 
+  writeStoreCache(files, outcome.events);
   return { events: outcome.events, hashes: outcome.hashes, path: ownFile };
 }
 
@@ -192,6 +318,9 @@ export function appendEvents(state: StoreState, events: UnifiedTokenEvent[]): Un
   // contention. Two processes that race to scan the same upstream tool can
   // each persist the same event into their own file; loadStore unions and
   // dedupes them on the next read. Slightly redundant on disk, lossless.
-  if (buffer) appendFileSync(state.path, buffer);
+  if (buffer) {
+    appendFileSync(state.path, buffer);
+    writeStoreCache(listStoreFiles(getEventsDir()), state.events);
+  }
   return added;
 }
