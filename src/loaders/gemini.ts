@@ -5,6 +5,7 @@ import path from 'node:path';
 import { glob } from 'tinyglobby';
 import type { UnifiedTokenEvent } from '../types.js';
 import { isValidTimestamp } from '../types.js';
+import { loadCachedFileEvents } from './cache.js';
 
 const HOME = homedir();
 const FALLBACK_MODEL = 'gemini';
@@ -47,22 +48,21 @@ export async function loadGeminiEvents(): Promise<UnifiedTokenEvent[]> {
 
 	const tmpDir = path.join(geminiDir, 'tmp');
 	const files = await glob('**/chats/session-*.json', { cwd: tmpDir, absolute: true });
-	const events: UnifiedTokenEvent[] = [];
-	const seen = new Set<string>();
 
-	for (const file of files) {
+	const events = await loadCachedFileEvents('gemini', files, async (file) => {
+		const fileEvents: UnifiedTokenEvent[] = [];
 		let content: string;
 		try {
 			content = await readFile(file, 'utf-8');
 		} catch {
-			continue;
+			return fileEvents;
 		}
 
 		let session: Record<string, unknown>;
 		try {
 			session = JSON.parse(content);
 		} catch {
-			continue;
+			return fileEvents;
 		}
 
 		const sessionId = String(session.sessionId ?? path.basename(file, '.json'));
@@ -70,6 +70,7 @@ export async function loadGeminiEvents(): Promise<UnifiedTokenEvent[]> {
 		const messages = Array.isArray(session.messages)
 			? (session.messages as Record<string, unknown>[])
 			: [];
+		const seen = new Set<string>();
 
 		for (const msg of messages) {
 			const tokens = msg.tokens as Record<string, unknown> | undefined;
@@ -112,7 +113,7 @@ export async function loadGeminiEvents(): Promise<UnifiedTokenEvent[]> {
 					? msg.model
 					: FALLBACK_MODEL;
 
-			events.push({
+			fileEvents.push({
 				source: 'gemini',
 				timestamp,
 				sessionId,
@@ -128,7 +129,8 @@ export async function loadGeminiEvents(): Promise<UnifiedTokenEvent[]> {
 				project,
 			});
 		}
-	}
+		return fileEvents;
+	});
 
 	events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 	return events;

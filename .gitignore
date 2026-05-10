@@ -28,6 +28,9 @@ Thumbs.db
 .env
 .env.local
 
+# Local Tauri updater signing keys
+.tauri/
+
 # Claude Code local state
 .claude/
 CLAUDE.md

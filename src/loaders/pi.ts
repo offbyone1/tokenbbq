@@ -5,6 +5,7 @@ import path from 'node:path';
 import { glob } from 'tinyglobby';
 import type { UnifiedTokenEvent } from '../types.js';
 import { isValidTimestamp } from '../types.js';
+import { loadCachedFileEvents } from './cache.js';
 
 const HOME = homedir();
 
@@ -29,10 +30,10 @@ export async function loadPiEvents(): Promise<UnifiedTokenEvent[]> {
 	if (!piDir) return [];
 
 	const files = await glob('**/*.jsonl', { cwd: piDir, absolute: true });
-	const events: UnifiedTokenEvent[] = [];
-	const seen = new Set<string>();
 
-	for (const file of files) {
+	const events = await loadCachedFileEvents('pi', files, async (file) => {
+		const fileEvents: UnifiedTokenEvent[] = [];
+		const seen = new Set<string>();
 		const relPath = path.relative(piDir, file);
 		const segments = relPath.split(path.sep);
 		const project = segments.length >= 2 ? segments[0] : 'unknown';
@@ -44,7 +45,7 @@ export async function loadPiEvents(): Promise<UnifiedTokenEvent[]> {
 		try {
 			content = await readFile(file, 'utf-8');
 		} catch {
-			continue;
+			return fileEvents;
 		}
 
 		for (const line of content.split(/\r?\n/)) {
@@ -84,7 +85,7 @@ export async function loadPiEvents(): Promise<UnifiedTokenEvent[]> {
 			const rawModel = String(message.model ?? 'unknown');
 			const cost = usage.cost as Record<string, unknown> | undefined;
 
-			events.push({
+			fileEvents.push({
 				source: 'pi',
 				timestamp,
 				sessionId,
@@ -100,7 +101,8 @@ export async function loadPiEvents(): Promise<UnifiedTokenEvent[]> {
 				project,
 			});
 		}
-	}
+		return fileEvents;
+	});
 
 	events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 	return events;

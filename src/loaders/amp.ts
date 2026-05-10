@@ -5,6 +5,7 @@ import { glob } from 'tinyglobby';
 import type { UnifiedTokenEvent } from '../types.js';
 import { isValidTimestamp } from '../types.js';
 import { getPlatformDataDirs } from '../platform-paths.js';
+import { loadCachedFileEvents } from './cache.js';
 
 function getAmpPath(): string | null {
 	const envPath = (process.env.AMP_DATA_DIR ?? '').trim();
@@ -31,21 +32,21 @@ export async function loadAmpEvents(): Promise<UnifiedTokenEvent[]> {
 	if (!existsSync(threadsDir)) return [];
 
 	const files = await glob('**/*.json', { cwd: threadsDir, absolute: true });
-	const events: UnifiedTokenEvent[] = [];
 
-	for (const file of files) {
+	const events = await loadCachedFileEvents('amp', files, async (file) => {
+		const fileEvents: UnifiedTokenEvent[] = [];
 		let content: string;
 		try {
 			content = await readFile(file, 'utf-8');
 		} catch {
-			continue;
+			return fileEvents;
 		}
 
 		let thread: Record<string, unknown>;
 		try {
 			thread = JSON.parse(content);
 		} catch {
-			continue;
+			return fileEvents;
 		}
 
 		const threadId = String(thread.id ?? path.basename(file, '.json'));
@@ -85,7 +86,7 @@ export async function loadAmpEvents(): Promise<UnifiedTokenEvent[]> {
 				}
 			}
 
-			events.push({
+			fileEvents.push({
 				source: 'amp',
 				timestamp: evt.timestamp,
 				sessionId: threadId,
@@ -100,7 +101,8 @@ export async function loadAmpEvents(): Promise<UnifiedTokenEvent[]> {
 				costUSD: 0,
 			});
 		}
-	}
+		return fileEvents;
+	});
 
 	events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 	return events;

@@ -6,6 +6,7 @@ import { glob } from 'tinyglobby';
 import type { UnifiedTokenEvent } from '../types.js';
 import { isValidTimestamp } from '../types.js';
 import { resolveProjectRoot } from '../project.js';
+import { loadCachedFileRecords } from './cache.js';
 
 const HOME = homedir();
 
@@ -58,6 +59,27 @@ function parseLine(raw: Record<string, unknown>): UnifiedTokenEvent | null {
 	};
 }
 
+type CachedClaudeEvent = {
+	dedupeKey: string;
+	event: UnifiedTokenEvent;
+};
+
+function isCachedClaudeEvent(value: unknown): value is CachedClaudeEvent {
+	if (!value || typeof value !== 'object') return false;
+	const record = value as Record<string, unknown>;
+	const event = record.event as Record<string, unknown> | undefined;
+	return (
+		typeof record.dedupeKey === 'string' &&
+		!!event &&
+		typeof event.source === 'string' &&
+		typeof event.timestamp === 'string' &&
+		typeof event.sessionId === 'string' &&
+		typeof event.model === 'string' &&
+		!!event.tokens &&
+		typeof event.tokens === 'object'
+	);
+}
+
 export function getClaudeWatchPaths(): string[] {
 	return getClaudePaths().map((p) => path.join(p, 'projects'));
 }
@@ -66,58 +88,65 @@ export async function loadClaudeEvents(): Promise<UnifiedTokenEvent[]> {
 	const claudePaths = getClaudePaths();
 	if (claudePaths.length === 0) return [];
 
-	const events: UnifiedTokenEvent[] = [];
-	const seen = new Set<string>();
+	const allFiles: string[] = [];
 
 	for (const claudePath of claudePaths) {
 		const projectsDir = path.join(claudePath, 'projects');
 		const files = await glob('**/*.jsonl', { cwd: projectsDir, absolute: true });
+		allFiles.push(...files);
+	}
 
-		for (const file of files) {
-			let content: string;
+	const records = await loadCachedFileRecords('claude-code', allFiles, async (file) => {
+		const fileEvents: CachedClaudeEvent[] = [];
+		let content: string;
+		try {
+			content = await readFile(file, 'utf-8');
+		} catch {
+			return fileEvents;
+		}
+
+		const sessionId = path.basename(file, '.jsonl');
+
+		for (const line of content.split(/\r?\n/)) {
+			const trimmed = line.trim();
+			if (!trimmed) continue;
+
+			let parsed: Record<string, unknown>;
 			try {
-				content = await readFile(file, 'utf-8');
+				parsed = JSON.parse(trimmed);
 			} catch {
 				continue;
 			}
 
-			const sessionId = path.basename(file, '.jsonl');
+			const event = parseLine(parsed);
+			if (!event) continue;
 
-			for (const line of content.split(/\r?\n/)) {
-				const trimmed = line.trim();
-				if (!trimmed) continue;
-
-				let parsed: Record<string, unknown>;
-				try {
-					parsed = JSON.parse(trimmed);
-				} catch {
-					continue;
-				}
-
-				const event = parseLine(parsed);
-				if (!event) continue;
-
-				event.sessionId = sessionId;
-				// cwd can change mid-session (user cd's); we honor the cwd at each event.
-				const cwd = typeof parsed.cwd === 'string' ? parsed.cwd : undefined;
-				if (cwd) {
-					event.project = resolveProjectRoot(cwd).name;
-				}
-				// No fallback: if cwd is absent, event.project stays undefined and the event
-				// is excluded from per-project aggregation (but still counts toward totals).
-
-				const requestId = String(parsed.requestId ?? '');
-				const messageId = String((parsed.message as Record<string, unknown>)?.id ?? '');
-				const dedupeKey = requestId && messageId
-					? `${messageId}:${requestId}`
-					: `${event.timestamp}:${event.model}:${event.tokens.input}:${event.tokens.output}`;
-				if (seen.has(dedupeKey)) continue;
-				seen.add(dedupeKey);
-
-				events.push(event);
+			event.sessionId = sessionId;
+			// cwd can change mid-session (user cd's); we honor the cwd at each event.
+			const cwd = typeof parsed.cwd === 'string' ? parsed.cwd : undefined;
+			if (cwd) {
+				event.project = resolveProjectRoot(cwd).name;
 			}
+			// No fallback: if cwd is absent, event.project stays undefined and the event
+			// is excluded from per-project aggregation (but still counts toward totals).
+
+			const requestId = String(parsed.requestId ?? '');
+			const messageId = String((parsed.message as Record<string, unknown>)?.id ?? '');
+			const dedupeKey = requestId && messageId
+				? `${messageId}:${requestId}`
+				: `${event.timestamp}:${event.model}:${event.tokens.input}:${event.tokens.output}`;
+
+			fileEvents.push({ dedupeKey, event });
 		}
-	}
+		return fileEvents;
+	}, isCachedClaudeEvent);
+
+	const seen = new Set<string>();
+	const events = records.flatMap((record) => {
+		if (seen.has(record.dedupeKey)) return [];
+		seen.add(record.dedupeKey);
+		return [record.event];
+	});
 
 	events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 	return events;
