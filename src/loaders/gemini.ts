@@ -5,10 +5,31 @@ import path from 'node:path';
 import { glob } from 'tinyglobby';
 import type { UnifiedTokenEvent } from '../types.js';
 import { isValidTimestamp } from '../types.js';
-import { loadCachedFileEvents } from './cache.js';
+import { loadCachedFileRecords } from './cache.js';
 
 const HOME = homedir();
 const FALLBACK_MODEL = 'gemini';
+
+type CachedGeminiEvent = {
+	dedupeKey: string;
+	event: UnifiedTokenEvent;
+};
+
+function isCachedGeminiEvent(value: unknown): value is CachedGeminiEvent {
+	if (!value || typeof value !== 'object') return false;
+	const record = value as Record<string, unknown>;
+	const event = record.event as Record<string, unknown> | undefined;
+	return (
+		typeof record.dedupeKey === 'string' &&
+		!!event &&
+		typeof event.source === 'string' &&
+		typeof event.timestamp === 'string' &&
+		typeof event.sessionId === 'string' &&
+		typeof event.model === 'string' &&
+		!!event.tokens &&
+		typeof event.tokens === 'object'
+	);
+}
 
 function getGeminiDir(): string | null {
 	const envPath = (process.env.GEMINI_DIR ?? '').trim();
@@ -49,8 +70,8 @@ export async function loadGeminiEvents(): Promise<UnifiedTokenEvent[]> {
 	const tmpDir = path.join(geminiDir, 'tmp');
 	const files = await glob('**/chats/session-*.json', { cwd: tmpDir, absolute: true });
 
-	const events = await loadCachedFileEvents('gemini', files, async (file) => {
-		const fileEvents: UnifiedTokenEvent[] = [];
+	const records = await loadCachedFileRecords('gemini', files, async (file) => {
+		const fileEvents: CachedGeminiEvent[] = [];
 		let content: string;
 		try {
 			content = await readFile(file, 'utf-8');
@@ -70,7 +91,6 @@ export async function loadGeminiEvents(): Promise<UnifiedTokenEvent[]> {
 		const messages = Array.isArray(session.messages)
 			? (session.messages as Record<string, unknown>[])
 			: [];
-		const seen = new Set<string>();
 
 		for (const msg of messages) {
 			const tokens = msg.tokens as Record<string, unknown> | undefined;
@@ -105,8 +125,6 @@ export async function loadGeminiEvents(): Promise<UnifiedTokenEvent[]> {
 			const dedupeKey = id
 				? `gemini:${sessionId}:${id}`
 				: `gemini:${sessionId}:${timestamp}:${input}:${output}:${cacheRead}:${reasoning}`;
-			if (seen.has(dedupeKey)) continue;
-			seen.add(dedupeKey);
 
 			const model =
 				typeof msg.model === 'string' && msg.model.trim() !== ''
@@ -114,22 +132,34 @@ export async function loadGeminiEvents(): Promise<UnifiedTokenEvent[]> {
 					: FALLBACK_MODEL;
 
 			fileEvents.push({
-				source: 'gemini',
-				timestamp,
-				sessionId,
-				model,
-				tokens: {
-					input,
-					output,
-					cacheCreation,
-					cacheRead,
-					reasoning,
+				dedupeKey,
+				event: {
+					source: 'gemini',
+					timestamp,
+					sessionId,
+					model,
+					tokens: {
+						input,
+						output,
+						cacheCreation,
+						cacheRead,
+						reasoning,
+					},
+					costUSD: 0,
+					project,
 				},
-				costUSD: 0,
-				project,
 			});
 		}
 		return fileEvents;
+	}, isCachedGeminiEvent);
+
+	// Dedup globally across all files (cached or freshly parsed), not per-file:
+	// the same logical message can appear in more than one session file.
+	const seen = new Set<string>();
+	const events = records.flatMap((record) => {
+		if (seen.has(record.dedupeKey)) return [];
+		seen.add(record.dedupeKey);
+		return [record.event];
 	});
 
 	events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());

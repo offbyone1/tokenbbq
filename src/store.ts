@@ -320,7 +320,15 @@ export function appendEvents(state: StoreState, events: UnifiedTokenEvent[]): Un
   // dedupes them on the next read. Slightly redundant on disk, lossless.
   if (buffer) {
     appendFileSync(state.path, buffer);
-    writeStoreCache(listStoreFiles(getEventsDir()), state.events);
+    // Deliberately do NOT refresh the read-cache here. state.events is this
+    // process's view as of its last loadStore() plus its own appends — it does
+    // not include events another process appended to its own file since then.
+    // Pairing that stale list with a fresh on-disk file snapshot would persist
+    // a cache that looks complete (sameFileSet matches) but silently drops the
+    // other process's events. Appending changed this process's own file
+    // (mtime/size), so the existing cache no longer matches the file set and
+    // the next loadStore() does a correct full rescan and rewrites the cache
+    // from the true on-disk union.
   }
   return added;
 }

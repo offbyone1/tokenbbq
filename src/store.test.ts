@@ -139,4 +139,26 @@ describe('appendEvents', () => {
     assert.ok(!existsSync(legacyPath()), 'legacy events.ndjson should not be created');
     assert.ok(state.path !== legacyPath(), 'state.path must be the per-process file');
   });
+
+  test('does not persist a stale read-cache that hides another state\'s events', () => {
+    // Two loaded store states race on appends. A stale state writing the
+    // read-cache must not drop events a fresher state already persisted.
+    const a = ev({ sessionId: 'a' });
+    const b = ev({ sessionId: 'b' });
+    const c = ev({ sessionId: 'c' });
+
+    const stateA = loadStore();
+    appendEvents(stateA, [a]);
+
+    const stateB = loadStore(); // sees a
+    appendEvents(stateB, [b]);
+
+    appendEvents(stateA, [c]); // stale stateA appends; must not bury b
+
+    const reread = loadStore();
+    assert.deepEqual(
+      reread.events.map((e) => e.sessionId).sort(),
+      ['a', 'b', 'c'],
+    );
+  });
 });

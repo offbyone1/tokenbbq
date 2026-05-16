@@ -13,7 +13,8 @@ TokenBBQ is a TypeScript ESM CLI and dashboard. Core source lives in `src/`: `in
 - `npm run build`: produce the publishable CLI bundle in `dist/`.
 - `npm run widget:install`: install widget dependencies.
 - `npm run widget:dev`: build the sidecar and launch the Tauri widget.
-- `npm run widget:build`: build the CLI, sidecar, and desktop widget package.
+- `npm run widget:build`: build the CLI, sidecar, and desktop widget package locally. Updater artifacts are disabled (via `widget/src-tauri/tauri.dev.conf.json`), so no signing key is needed.
+- `npm run widget:build:release`: full signed build with updater artifacts. Requires `TAURI_SIGNING_PRIVATE_KEY` (and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`); release CI builds this path via `tauri-action`.
 
 ## Coding Style & Naming Conventions
 

@@ -5,9 +5,30 @@ import path from 'node:path';
 import { glob } from 'tinyglobby';
 import type { UnifiedTokenEvent } from '../types.js';
 import { isValidTimestamp } from '../types.js';
-import { loadCachedFileEvents } from './cache.js';
+import { loadCachedFileRecords } from './cache.js';
 
 const HOME = homedir();
+
+type CachedPiEvent = {
+	dedupeKey: string;
+	event: UnifiedTokenEvent;
+};
+
+function isCachedPiEvent(value: unknown): value is CachedPiEvent {
+	if (!value || typeof value !== 'object') return false;
+	const record = value as Record<string, unknown>;
+	const event = record.event as Record<string, unknown> | undefined;
+	return (
+		typeof record.dedupeKey === 'string' &&
+		!!event &&
+		typeof event.source === 'string' &&
+		typeof event.timestamp === 'string' &&
+		typeof event.sessionId === 'string' &&
+		typeof event.model === 'string' &&
+		!!event.tokens &&
+		typeof event.tokens === 'object'
+	);
+}
 
 function getPiAgentDir(): string | null {
 	const envPath = (process.env.PI_AGENT_DIR ?? '').trim();
@@ -31,9 +52,8 @@ export async function loadPiEvents(): Promise<UnifiedTokenEvent[]> {
 
 	const files = await glob('**/*.jsonl', { cwd: piDir, absolute: true });
 
-	const events = await loadCachedFileEvents('pi', files, async (file) => {
-		const fileEvents: UnifiedTokenEvent[] = [];
-		const seen = new Set<string>();
+	const records = await loadCachedFileRecords('pi', files, async (file) => {
+		const fileEvents: CachedPiEvent[] = [];
 		const relPath = path.relative(piDir, file);
 		const segments = relPath.split(path.sep);
 		const project = segments.length >= 2 ? segments[0] : 'unknown';
@@ -79,29 +99,40 @@ export async function loadPiEvents(): Promise<UnifiedTokenEvent[]> {
 			if (!isValidTimestamp(parsed.timestamp)) continue;
 			const timestamp = parsed.timestamp;
 			const dedupeKey = `pi:${timestamp}:${input + output}`;
-			if (seen.has(dedupeKey)) continue;
-			seen.add(dedupeKey);
 
 			const rawModel = String(message.model ?? 'unknown');
 			const cost = usage.cost as Record<string, unknown> | undefined;
 
 			fileEvents.push({
-				source: 'pi',
-				timestamp,
-				sessionId,
-				model: `[pi] ${rawModel}`,
-				tokens: {
-					input,
-					output,
-					cacheCreation: Number(usage.cacheWrite ?? 0),
-					cacheRead: Number(usage.cacheRead ?? 0),
-					reasoning: 0,
+				dedupeKey,
+				event: {
+					source: 'pi',
+					timestamp,
+					sessionId,
+					model: `[pi] ${rawModel}`,
+					tokens: {
+						input,
+						output,
+						cacheCreation: Number(usage.cacheWrite ?? 0),
+						cacheRead: Number(usage.cacheRead ?? 0),
+						reasoning: 0,
+					},
+					costUSD: typeof cost?.total === 'number' ? cost.total : 0,
+					project,
 				},
-				costUSD: typeof cost?.total === 'number' ? cost.total : 0,
-				project,
 			});
 		}
 		return fileEvents;
+	}, isCachedPiEvent);
+
+	// Dedup globally across all files, not per-file: pi's dedupe key is
+	// timestamp + token total (no file/session component), so the same logical
+	// event recorded in more than one session file must collapse to one.
+	const seen = new Set<string>();
+	const events = records.flatMap((record) => {
+		if (seen.has(record.dedupeKey)) return [];
+		seen.add(record.dedupeKey);
+		return [record.event];
 	});
 
 	events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
