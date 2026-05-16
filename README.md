@@ -91,6 +91,12 @@ npm run widget:build               # produces installers under widget/src-tauri/
 
 All data stays on your machine. The only network request is fetching model prices.
 
+## Guides
+
+- [How to Track Claude Code Token Usage](https://offbyone.cloud/blog/track-claude-code-token-usage.html) — absolute token numbers and the 5-hour / 7-day rate-limit windows
+- [How to Track OpenAI Codex Token Usage](https://offbyone.cloud/blog/track-openai-codex-token-usage.html) — same setup for Codex, with a Codex-vs-Claude comparison
+- [Track AI Token Usage Per Project](https://offbyone.cloud/blog/track-token-usage-per-project.html) — split daily costs across multiple repositories
+
 ## Credits
 
 TokenBBQ builds on the data-loading patterns from [ccusage](https://github.com/ryoppippi/ccusage) by [@ryoppippi](https://github.com/ryoppippi). Thanks for the excellent groundwork on parsing Claude Code, Codex, OpenCode, Amp, and Pi-Agent usage data.
