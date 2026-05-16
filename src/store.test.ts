@@ -1,6 +1,6 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { loadStore, appendEvents, hashEvent, getStoreDir } from './store.js';
@@ -99,6 +99,42 @@ describe('loadStore', () => {
 
     const state = loadStore();
     assert.equal(state.events.length, 1);
+  });
+
+  test('ignores a poisoned cache written by the pre-fix version', () => {
+    const eventsDir = path.join(tmp, 'events');
+    mkdirSync(eventsDir, { recursive: true });
+
+    const a = ev({ sessionId: 'a' });
+    const b = ev({ sessionId: 'b' });
+    const file = path.join(eventsDir, 'events-host-1.ndjson');
+    appendFileSync(
+      file,
+      JSON.stringify({ v: 1, ...a, eventHash: hashEvent(a) }) + '\n' +
+        JSON.stringify({ v: 1, ...b, eventHash: hashEvent(b) }) + '\n',
+    );
+
+    // The old buggy appendEvents() could persist a cache whose file metadata
+    // matches the real file but whose event list is incomplete (missing b).
+    // Such a cache must not be trusted after upgrade — neither at the old
+    // store-v1 path nor via the version field.
+    const s = statSync(file);
+    const meta = [{ path: file, mtimeMs: s.mtimeMs, size: s.size }];
+    const cacheDir = path.join(tmp, 'cache');
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(
+      path.join(cacheDir, 'store-v1.json'),
+      JSON.stringify({ v: 1, files: meta, events: [a] }),
+      'utf-8',
+    );
+    writeFileSync(
+      path.join(cacheDir, 'store-v2.json'),
+      JSON.stringify({ v: 1, files: meta, events: [a] }),
+      'utf-8',
+    );
+
+    const state = loadStore();
+    assert.deepEqual(state.events.map((e) => e.sessionId).sort(), ['a', 'b']);
   });
 });
 

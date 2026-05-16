@@ -6,6 +6,15 @@ import type { UnifiedTokenEvent } from './types.js';
 
 const CURRENT_VERSION = 1;
 
+// Version of the store read-cache file, independent of the event-line schema
+// version (CURRENT_VERSION) on purpose: bumping CURRENT_VERSION would change
+// the on-disk ndjson `v` and make older tokenbbq builds skip those lines as
+// "future". Bumped to 2 to invalidate any store-v1 cache written by the
+// pre-fix appendEvents(), which could persist a file snapshot paired with an
+// incomplete event list. A stale v1 cache is now ignored (different filename
+// and version) and rebuilt correctly on the next load.
+const STORE_CACHE_VERSION = 2;
+
 export interface StoreState {
   events: UnifiedTokenEvent[];
   hashes: Set<string>;
@@ -24,7 +33,7 @@ function getEventsDir(): string {
 }
 
 function getStoreCachePath(): string {
-  return path.join(getStoreDir(), 'cache', 'store-v1.json');
+  return path.join(getStoreDir(), 'cache', `store-v${STORE_CACHE_VERSION}.json`);
 }
 
 function sanitizeForFilename(s: string): string {
@@ -165,7 +174,7 @@ function readStoreCache(files: StoreFileMeta[]): LoadOutcome | null {
     const parsed = JSON.parse(readFileSync(getStoreCachePath(), 'utf-8')) as unknown;
     if (!parsed || typeof parsed !== 'object') return null;
     const cache = parsed as StoreReadCache;
-    if (cache.v !== CURRENT_VERSION || !Array.isArray(cache.files) || !Array.isArray(cache.events)) return null;
+    if (cache.v !== STORE_CACHE_VERSION || !Array.isArray(cache.files) || !Array.isArray(cache.events)) return null;
     if (!sameFileSet(cache.files, files)) return null;
     if (!cache.events.every(isStoreEvent)) return null;
     return outcomeFromEvents(cache.events);
@@ -180,7 +189,7 @@ function writeStoreCache(files: StoreFileMeta[], events: UnifiedTokenEvent[]): v
   const tmp = path.join(dir, `${path.basename(target)}.${process.pid}.${Date.now()}.tmp`);
   try {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(tmp, JSON.stringify({ v: CURRENT_VERSION, files, events }), 'utf-8');
+    writeFileSync(tmp, JSON.stringify({ v: STORE_CACHE_VERSION, files, events }), 'utf-8');
     renameSync(tmp, target);
   } catch {
     // Performance-only cache. Store reads must keep working if this fails.
