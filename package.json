@@ -2,7 +2,7 @@
 	"name": "tokenbbq",
 	"type": "module",
 	"version": "0.6.0",
-	"description": "Visualize token usage and costs across all major AI coding tools — Claude Code, Codex, Gemini, OpenCode, Amp, Pi",
+	"description": "See absolute token usage, estimated costs, project/model breakdowns, and Claude/Codex rate-limit windows for AI coding CLIs",
 	"author": "offbyone1",
 	"license": "MIT",
 	"homepage": "https://github.com/offbyone1/tokenbbq#readme",
@@ -32,6 +32,7 @@
 	},
 	"files": [
 		"dist",
+		"docs/assets",
 		"README.md",
 		"LICENSE"
 	],
