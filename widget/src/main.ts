@@ -5,8 +5,9 @@ import { availableMonitors, getCurrentWindow, PhysicalPosition } from "@tauri-ap
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { ClaudeUsageResponse, LocalUsageSummary, SettingsDisplay } from "./types";
 import { loadToggleState, saveToggleState, resolveMode, type SourceToggleState } from "./source-toggle";
-import { renderCompact, renderExpanded, renderError, renderLocalCompact, setViewState, getWorkAreaPhysical, currentFrameInsetLogical, clampWindowToWorkAreaOnce, refreshPillPositionIfPillMode, setMonitorWorkAreaPhysical, refitExpandedHeight } from "./ui";
+import { renderCompact, renderExpanded, renderLocalCompact, setViewState, getWorkAreaPhysical, currentFrameInsetLogical, clampWindowToWorkAreaOnce, refreshPillPositionIfPillMode, setMonitorWorkAreaPhysical, refitExpandedHeight } from "./ui";
 import { scheduleAutoUpdateCheck, setupUpdateControls } from "./update";
+import { describeClaudeFailure, describeLocalFailure, keepLastGoodOnClaudeFailure, keepLastGoodOnLocalFailure, usageForRender, type UsageIssue } from "./usage-state";
 
 const LOCAL_POLL_INTERVAL_MS = 5 * 60 * 1000;
 // Persistent cache of the last successful fetchLocalUsage result. Codex /
@@ -41,6 +42,17 @@ let localPollTimer: ReturnType<typeof setInterval> | null = null;
 let lastUsageJson = "";
 let lastLocal: LocalUsageSummary | null = null;
 let toggleState: SourceToggleState = loadToggleState();
+let claudeIssue: UsageIssue | null = null;
+let localIssue: UsageIssue | null = null;
+
+function lastClaudeUsage(): ClaudeUsageResponse | null {
+  if (!lastUsageJson) return null;
+  try {
+    return JSON.parse(lastUsageJson) as ClaudeUsageResponse;
+  } catch {
+    return null;
+  }
+}
 
 function currentMode() {
   const usage = lastUsageJson ? JSON.parse(lastUsageJson) as ClaudeUsageResponse : null;
@@ -51,14 +63,23 @@ function currentMode() {
   return resolveMode(toggleState, hasClaude, hasCodex);
 }
 
+function currentIssues(): UsageIssue[] {
+  const issues: UsageIssue[] = [];
+  if (toggleState.claude && claudeIssue) issues.push(claudeIssue);
+  if ((toggleState.codex || lastLocal) && localIssue) issues.push(localIssue);
+  return issues;
+}
+
 async function fetchUsage(): Promise<void> {
   try {
     const usage = await invoke<ClaudeUsageResponse>("fetch_usage");
     const json = JSON.stringify(usage);
-    if (json === lastUsageJson) return;
+    const hadIssue = claudeIssue !== null;
+    claudeIssue = null;
+    if (json === lastUsageJson && !hadIssue) return;
     lastUsageJson = json;
     renderCompact(usage, lastLocal, toggleState);
-    renderExpanded(usage, lastLocal, toggleState);
+    renderExpanded(usage, lastLocal, toggleState, currentIssues());
     // Sync window size to mode — covers the case where dev-mode CSS
     // edits change the dual-mode dimensions but the user hasn't
     // toggled to trigger a setSize.
@@ -66,11 +87,15 @@ async function fetchUsage(): Promise<void> {
       setViewState("compact", currentMode()).catch(() => {});
     }
   } catch (e) {
-    renderError(String(e));
-    // Drop the cached payload so the next successful fetch re-renders even
-    // if claude.ai returns the exact same JSON it did before the error —
-    // otherwise the UI stays stuck on "err" until the upstream values move.
-    lastUsageJson = "";
+    console.warn("fetch_usage failed:", e);
+    const lastGood = lastClaudeUsage();
+    claudeIssue = describeClaudeFailure(e, lastGood);
+    const usage = usageForRender(keepLastGoodOnClaudeFailure(lastGood));
+    renderCompact(usage, lastLocal, toggleState);
+    renderExpanded(usage, lastLocal, toggleState, currentIssues());
+    if (currentView === "compact") {
+      setViewState("compact", currentMode()).catch(() => {});
+    }
   }
 }
 
@@ -82,28 +107,25 @@ async function fetchLocalUsage(): Promise<void> {
   try {
     const local = await invoke<LocalUsageSummary>("fetch_local_usage");
     lastLocal = local;
+    localIssue = null;
     saveCachedLocalUsage(local);
     renderLocalCompact(local);
-    // Re-render pill + expanded if we already have claude data. Otherwise
-    // the pill would show stale Codex data (or none) for up to 60s while
-    // the claude.ai poll catches up — visible especially right after the
-    // user starts Codex with the Codex toggle already on.
-    if (lastUsageJson) {
-      try {
-        const usage = JSON.parse(lastUsageJson) as ClaudeUsageResponse;
-        renderCompact(usage, local, toggleState);
-        renderExpanded(usage, local, toggleState);
-        if (currentView === "compact") {
-          setViewState("compact", currentMode()).catch(() => {});
-        }
-      } catch {}
+    // Re-render pill + expanded with whatever Claude state exists. This keeps
+    // Codex/local values live even when Claude Code is not connected.
+    const usage = usageForRender(lastClaudeUsage());
+    renderCompact(usage, local, toggleState);
+    renderExpanded(usage, local, toggleState, currentIssues());
+    if (currentView === "compact") {
+      setViewState("compact", currentMode()).catch(() => {});
     }
   } catch (e) {
-    // Sidecar unavailable / errored → degrade gracefully: hide the local zone,
-    // keep claude.ai data visible. Console-only so we don't drown the user.
+    // Sidecar unavailable / errored: keep the last good local snapshot visible.
     console.warn("fetch_local_usage failed:", e);
-    lastLocal = null;
-    renderLocalCompact(null);
+    localIssue = describeLocalFailure(e, lastLocal);
+    lastLocal = keepLastGoodOnLocalFailure(lastLocal);
+    renderLocalCompact(lastLocal);
+    const usage = usageForRender(lastClaudeUsage());
+    renderExpanded(usage, lastLocal, toggleState, currentIssues());
   }
 }
 
@@ -526,13 +548,9 @@ function setupEventListeners(): void {
     if (currentView === "compact") {
       await setViewState("compact", mode);
     }
-    if (lastUsageJson) {
-      try {
-        const usage = JSON.parse(lastUsageJson) as ClaudeUsageResponse;
-        renderCompact(usage, lastLocal, toggleState);
-        renderExpanded(usage, lastLocal, toggleState);
-      } catch {}
-    }
+    const usage = usageForRender(lastClaudeUsage());
+    renderCompact(usage, lastLocal, toggleState);
+    renderExpanded(usage, lastLocal, toggleState, currentIssues());
   });
 
   // Theme
@@ -552,15 +570,11 @@ function setupEventListeners(): void {
   extraToggle.checked = localStorage.getItem("tokenbbq-show-extra-usage") === "1";
   extraToggle.addEventListener("change", () => {
     localStorage.setItem("tokenbbq-show-extra-usage", extraToggle.checked ? "1" : "0");
-    if (lastUsageJson) {
-      try {
-        const usage = JSON.parse(lastUsageJson) as ClaudeUsageResponse;
-        renderExpanded(usage, lastLocal, toggleState);
-        // The user is in the settings overlay; the underlying panel just
-        // grew/shrunk by one row. Defer resizing to closeSettings so we
-        // don't yank window dimensions out from under their interaction.
-      } catch {}
-    }
+    const usage = usageForRender(lastClaudeUsage());
+    renderExpanded(usage, lastLocal, toggleState, currentIssues());
+    // The user is in the settings overlay; the underlying panel just
+    // grew/shrunk by one row. Defer resizing to closeSettings so we
+    // don't yank window dimensions out from under their interaction.
   });
 }
 

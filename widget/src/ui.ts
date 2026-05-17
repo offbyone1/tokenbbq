@@ -1,6 +1,7 @@
 import { getCurrentWindow, LogicalSize, PhysicalPosition } from "@tauri-apps/api/window";
 import type { ClaudeUsageResponse, LocalUsageSummary, ViewState } from "./types";
 import { resolveMode, type SourceMode, type SourceToggleState } from "./source-toggle";
+import { formatOptionalUtilization, hasUtilization, type UsageIssue } from "./usage-state";
 
 const COMPACT_SIZE_SINGLE = { width: 320, height: 64 };
 // Identical width to single — only the height grows for the second
@@ -68,6 +69,10 @@ function colorTier(pct: number): ColorTier {
 
 export function utilizationColor(pct: number): string {
   return `var(--${colorTier(pct)})`;
+}
+
+function optionalUtilizationColor(pct: number | null | undefined): string {
+  return hasUtilization(pct) ? utilizationColor(pct) : "";
 }
 
 // Long-form reset labels for the expanded panel. "Resets in 2h 15m" or
@@ -274,7 +279,7 @@ export function renderCompact(
     secondaryLogo.innerHTML = '';
   }
 
-  if (mode === 'both' && codex) {
+  if (mode === 'both') {
     // Dual-mode: show both rows AND their brand logos. CSS hides the
     // standalone .pill-fire in this mode, so the row logos are the only
     // brand identifier visible.
@@ -287,52 +292,52 @@ export function renderCompact(
     secondaryLogo.removeAttribute('hidden');
 
     // Primary row = Claude
-    const fhPctC = usage.five_hour?.utilization ?? 0;
-    const sdPctC = usage.seven_day?.utilization ?? 0;
-    fiveHour.textContent = `${Math.round(fhPctC)}%`;
-    fiveHour.style.color = utilizationColor(fhPctC);
-    sevenDay.textContent = `${Math.round(sdPctC)}%`;
-    sevenDay.style.color = utilizationColor(sdPctC);
+    const fhPctC = usage.five_hour?.utilization;
+    const sdPctC = usage.seven_day?.utilization;
+    fiveHour.textContent = formatOptionalUtilization(fhPctC);
+    fiveHour.style.color = optionalUtilizationColor(fhPctC);
+    sevenDay.textContent = formatOptionalUtilization(sdPctC);
+    sevenDay.style.color = optionalUtilizationColor(sdPctC);
     fiveHourLabel.textContent = formatHoursCompact(usage.five_hour?.resets_at ?? null) || "5h";
     sevenDayLabel.textContent = formatDaysCompact(usage.seven_day?.resets_at ?? null) || "7d";
 
     // Secondary row = Codex
-    const fhPctX = codex.primary?.utilization ?? 0;
-    const sdPctX = codex.secondary?.utilization ?? 0;
+    const fhPctX = codex?.primary?.utilization;
+    const sdPctX = codex?.secondary?.utilization;
     const fh2 = document.getElementById('five-hour-compact-2')! as HTMLElement;
     const sd2 = document.getElementById('seven-day-compact-2')! as HTMLElement;
     const fh2l = document.getElementById('five-hour-label-2')!;
     const sd2l = document.getElementById('seven-day-label-2')!;
-    fh2.textContent = `${Math.round(fhPctX)}%`;
-    fh2.style.color = utilizationColor(fhPctX);
-    sd2.textContent = `${Math.round(sdPctX)}%`;
-    sd2.style.color = utilizationColor(sdPctX);
-    fh2l.textContent = formatHoursCompact(codex.primary?.resetsAt ?? null) || "5h";
-    sd2l.textContent = formatDaysCompact(codex.secondary?.resetsAt ?? null) || "7d";
+    fh2.textContent = formatOptionalUtilization(fhPctX);
+    fh2.style.color = optionalUtilizationColor(fhPctX);
+    sd2.textContent = formatOptionalUtilization(sdPctX);
+    sd2.style.color = optionalUtilizationColor(sdPctX);
+    fh2l.textContent = formatHoursCompact(codex?.primary?.resetsAt ?? null) || "5h";
+    sd2l.textContent = formatDaysCompact(codex?.secondary?.resetsAt ?? null) || "7d";
     return;
   }
 
-  if (mode === 'codex' && codex) {
+  if (mode === 'codex') {
     setSingleRowVisibility();
-    const fhPct = codex.primary?.utilization ?? 0;
-    const sdPct = codex.secondary?.utilization ?? 0;
-    fiveHour.textContent = `${Math.round(fhPct)}%`;
-    fiveHour.style.color = utilizationColor(fhPct);
-    sevenDay.textContent = `${Math.round(sdPct)}%`;
-    sevenDay.style.color = utilizationColor(sdPct);
-    fiveHourLabel.textContent = formatHoursCompact(codex.primary?.resetsAt ?? null) || "5h";
-    sevenDayLabel.textContent = formatDaysCompact(codex.secondary?.resetsAt ?? null) || "7d";
+    const fhPct = codex?.primary?.utilization;
+    const sdPct = codex?.secondary?.utilization;
+    fiveHour.textContent = formatOptionalUtilization(fhPct);
+    fiveHour.style.color = optionalUtilizationColor(fhPct);
+    sevenDay.textContent = formatOptionalUtilization(sdPct);
+    sevenDay.style.color = optionalUtilizationColor(sdPct);
+    fiveHourLabel.textContent = formatHoursCompact(codex?.primary?.resetsAt ?? null) || "5h";
+    sevenDayLabel.textContent = formatDaysCompact(codex?.secondary?.resetsAt ?? null) || "7d";
     return;
   }
 
   // Default (claude single layout).
   setSingleRowVisibility();
-  const fhPct = usage.five_hour?.utilization ?? 0;
-  const sdPct = usage.seven_day?.utilization ?? 0;
-  fiveHour.textContent = `${Math.round(fhPct)}%`;
-  fiveHour.style.color = utilizationColor(fhPct);
-  sevenDay.textContent = `${Math.round(sdPct)}%`;
-  sevenDay.style.color = utilizationColor(sdPct);
+  const fhPct = usage.five_hour?.utilization;
+  const sdPct = usage.seven_day?.utilization;
+  fiveHour.textContent = formatOptionalUtilization(fhPct);
+  fiveHour.style.color = optionalUtilizationColor(fhPct);
+  sevenDay.textContent = formatOptionalUtilization(sdPct);
+  sevenDay.style.color = optionalUtilizationColor(sdPct);
   fiveHourLabel.textContent = formatHoursCompact(usage.five_hour?.resets_at ?? null) || "5h";
   sevenDayLabel.textContent = formatDaysCompact(usage.seven_day?.resets_at ?? null) || "7d";
 }
@@ -436,6 +441,7 @@ export function renderExpanded(
   usage: ClaudeUsageResponse,
   local: LocalUsageSummary | null = null,
   toggleState: SourceToggleState = { claude: true, codex: false },
+  issues: UsageIssue[] = [],
 ): void {
   const container = document.getElementById("usage-bars")!;
   const panel = document.getElementById("expanded-view")!;
@@ -450,8 +456,9 @@ export function renderExpanded(
   let html = `<div class="section-header">Compact view</div>`;
   html += `<div class="source-toggle-list">`;
   html += toggleRowHtml('toggle-claude', 'Claude Code', claudeBadgeSvg, CLAUDE_BRAND_COLOR, toggleState.claude, false);
-  html += toggleRowHtml('toggle-codex', 'Codex', codexBadgeSvg, CODEX_BRAND_COLOR, toggleState.codex && codexAvailable, !codexAvailable, codexHint);
+  html += toggleRowHtml('toggle-codex', 'Codex', codexBadgeSvg, CODEX_BRAND_COLOR, toggleState.codex, false, codexHint);
   html += `</div>`;
+  html += renderUsageIssuesHtml(issues);
 
   // Claude + Codex rate-limit blocks. Side-by-side when both have data;
   // single full-width column when only one is present. Hidden completely
@@ -490,6 +497,17 @@ export function renderExpanded(
   // The window is sized exactly once on expand (via measureExpandedHeight)
   // and stays that size. If content outgrows it, the body's overflow-y:auto
   // takes over and scrolls inside the fixed window.
+}
+
+function renderUsageIssuesHtml(issues: UsageIssue[]): string {
+  if (issues.length === 0) return "";
+  return issues
+    .map((issue) => `
+      <div class="usage-issue ${issue.stale ? 'stale' : 'offline'}">
+        <div class="usage-issue-title">${escapeHtml(issue.title)}</div>
+        <div class="usage-issue-message">${formatIssueMessage(issue.message)}</div>
+      </div>`)
+    .join("");
 }
 
 function renderLocalExpandedHtml(local: LocalUsageSummary): string {
@@ -559,18 +577,8 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-export function renderError(message: string): void {
-  document.getElementById("five-hour-compact")!.textContent = "—";
-  document.getElementById("seven-day-compact")!.textContent = "err";
-  // Errors here are claude.ai-specific; hide the local zone so we don't show
-  // stale numbers next to a broken half.
-  renderLocalCompact(null);
-
-  document.getElementById("usage-bars")!.innerHTML = `
-    <div class="error-banner">
-      <span class="error-icon">&#x26A0;</span>
-      <span>${escapeHtml(message)}</span>
-    </div>`;
+function formatIssueMessage(s: string): string {
+  return escapeHtml(s).replace(/`([^`]+)`/g, '<code>$1</code>');
 }
 
 // pillPosition is the pill's "home" — the visible top-left of the compact
