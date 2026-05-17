@@ -46,7 +46,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNGN0Y2M0Y1RDRFQ0YxRjgKUldUNDhlelU5V04vUHp3ZnNaNTNSV3NsMHUxbWFTcW92YS92aDVzYncvMmhIRnBiTGc5S2RxalIK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVBMEVDNTFCQ0JDNjgzRkYKUldUL2c4YkxHOFVPNnZsT09PRkEwSzVheFBYZENSemNTZEJkbWFiSDYxNUliaE92QkJ5dS9Xa3AK",
       "endpoints": [
         "https://github.com/offbyone1/tokenbbq/releases/latest/download/latest.json"
       ],
