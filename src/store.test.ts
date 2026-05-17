@@ -101,6 +101,33 @@ describe('loadStore', () => {
     assert.equal(state.events.length, 1);
   });
 
+  test('does NOT collapse distinct Claude turns (store-vs-ccusage parity guard)', () => {
+    // The Claude loader is the dedup authority and matches ccusage exactly
+    // (messageId:requestId, ID-less never deduped). The store adds a content
+    // hash only for multi-process safety. This guards the invariant that the
+    // content hash is injective for realistically-distinct Claude turns:
+    // every assistant turn has its own millisecond timestamp, so two genuine
+    // turns (even with identical token counts) must both survive — otherwise
+    // the dashboard would silently undercount vs ccusage.
+    const t1 = ev({
+      source: 'claude-code', sessionId: 'sess', model: 'claude-sonnet-4-20250514',
+      timestamp: '2026-05-01T10:00:00.000Z',
+      tokens: { input: 100, output: 50, cacheCreation: 0, cacheRead: 0, reasoning: 0 },
+    });
+    const t2 = ev({
+      source: 'claude-code', sessionId: 'sess', model: 'claude-sonnet-4-20250514',
+      timestamp: '2026-05-01T10:00:03.000Z', // 3s later — distinct turn
+      tokens: { input: 100, output: 50, cacheCreation: 0, cacheRead: 0, reasoning: 0 },
+    });
+    appendFileSync(
+      legacyPath(),
+      JSON.stringify({ v: 1, ...t1, eventHash: hashEvent(t1) }) + '\n' +
+      JSON.stringify({ v: 1, ...t2, eventHash: hashEvent(t2) }) + '\n',
+    );
+    const state = loadStore();
+    assert.equal(state.events.length, 2);
+  });
+
   test('rejects a NaN-poisoned token line (serializes to null on disk)', () => {
     const good = ev({ sessionId: 'ok' });
     const goodLine = JSON.stringify({ v: 1, ...good, eventHash: hashEvent(good) }) + '\n';
