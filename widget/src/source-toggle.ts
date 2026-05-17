@@ -47,14 +47,12 @@ export function saveToggleState(state: SourceToggleState): void {
  */
 export function resolveMode(
   state: SourceToggleState,
-  hasClaudeData: boolean,
-  hasCodexData: boolean,
+  _hasClaudeData: boolean,
+  _hasCodexData: boolean,
 ): SourceMode {
   if (!state.claude && !state.codex) return 'none';
 
-  const effClaude = state.claude && hasClaudeData;
-  const effCodex = state.codex && hasCodexData;
-  if (effClaude && effCodex) return 'both';
-  if (effCodex) return 'codex';
+  if (state.claude && state.codex) return 'both';
+  if (state.codex) return 'codex';
   return 'claude';
 }

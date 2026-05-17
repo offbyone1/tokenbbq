@@ -8,7 +8,7 @@
 import { spawn } from 'node:child_process';
 import { glob } from 'tinyglobby';
 
-const files = await glob('src/**/*.test.ts');
+const files = await glob(['src/**/*.test.ts', 'widget/tests/**/*.test.ts']);
 if (files.length === 0) {
   console.error('[run-tests] no test files matched src/**/*.test.ts');
   process.exit(1);

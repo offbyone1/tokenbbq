@@ -611,24 +611,41 @@ body.view-transitioning {
 .progress-fill.orange { background: var(--orange); box-shadow: 0 0 8px var(--orange-glow); }
 .progress-fill.red { background: var(--red); box-shadow: 0 0 8px var(--red-glow); }
 
-/* Error banner */
-.error-banner {
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 10px;
-  padding: 12px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  line-height: 1.5;
+.usage-issue {
+  margin: 8px 0 2px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
 }
 
-.error-icon {
-  color: var(--red);
-  font-size: 14px;
-  flex-shrink: 0;
+.usage-issue.offline {
+  border-color: rgba(236, 93, 93, 0.22);
+  background: rgba(236, 93, 93, 0.07);
+}
+
+.usage-issue.stale {
+  border-color: rgba(232, 123, 53, 0.22);
+  background: var(--accent-dim);
+}
+
+.usage-issue-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.usage-issue-message {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.usage-issue-message code {
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10px;
+  color: var(--text-primary);
 }
 
 /* Settings footer (settings overlay only) */
