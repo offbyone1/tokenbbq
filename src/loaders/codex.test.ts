@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync, utimesSync } from 'node:
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { loadCodexEvents, loadCodexRateLimits, normalizeUsage, subtractUsage, type RawUsage } from './codex.js';
+import { totalTokenCount } from '../types.js';
 
 function makeSession(dir: string, name: string, lines: string[], mtimeSec?: number): string {
 	const file = path.join(dir, name);
@@ -321,5 +322,16 @@ describe('loadCodexEvents', () => {
 			cacheRead: 100,
 			reasoning: 5,
 		});
+
+		// ccusage parity invariant (the documented Fix #1 residual): ccusage's
+		// Codex total is the reported `total_tokens` (data-loader.ts:91,
+		// `total_tokens > 0 ? total_tokens : input + output`). We reconstruct it
+		// from the 5-field breakdown instead. Because OpenAI defines
+		// total_tokens === input_tokens + output_tokens and cached ⊆ input, our
+		// totalTokenCount (input+output+cacheCreation+cacheRead, reasoning
+		// excluded) must equal the reported total_tokens for well-formed logs.
+		// Turn 1 reported total = 1100; turn 2 reported delta total = 1310-1100.
+		assert.equal(totalTokenCount(events[0].tokens), 1100);
+		assert.equal(totalTokenCount(events[1].tokens), 1310 - 1100);
 	});
 });

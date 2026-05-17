@@ -161,8 +161,15 @@ export function addTokens(a: TokenCounts, b: TokenCounts): TokenCounts {
 	};
 }
 
+// `reasoning` is informational only and is deliberately NOT part of the total.
+// For Codex/OpenAI the reasoning tokens are already counted inside `output`
+// (OpenAI semantics), so adding them would double-count. ccusage never adds
+// reasoning into its total either — apps/codex/src/data-loader.ts uses the
+// reported `total_tokens` (=== input + output). Excluding it here leaves Claude
+// totals unchanged (reasoning is always 0 there) and makes the Codex total
+// match ccusage. The `reasoning` field stays on TokenCounts for display.
 export function totalTokenCount(t: TokenCounts): number {
-	return t.input + t.output + t.cacheCreation + t.cacheRead + t.reasoning;
+	return t.input + t.output + t.cacheCreation + t.cacheRead;
 }
 
 // Returns true iff `s` parses to a finite Date. Loaders use this to drop
