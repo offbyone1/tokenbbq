@@ -57,6 +57,21 @@ function getLegacyFilePath(): string {
   return path.join(getStoreDir(), 'events.ndjson');
 }
 
+// Store-vs-ccusage parity note:
+// ccusage is stateless — it re-reads the JSONL on every run. TokenBBQ persists
+// an append-only store. Source-level dedup is the LOADER's job and matches
+// ccusage exactly (Claude: messageId:requestId, ID-less never deduped). This
+// content hash exists ONLY for multi-process safety (two processes racing to
+// persist the same scanned event must collapse to one). It deliberately keeps
+// timestamp (ms) + sessionId, so it is injective for realistically-distinct
+// Claude turns and cannot drop an event ccusage would keep (see the
+// "does NOT collapse distinct Claude turns" store test).
+// Known, accepted residual: (1) after a user MANUALLY prunes/rotates Claude
+// JSONL, TokenBBQ retains history ccusage forgets (TokenBBQ >= ccusage) — this
+// is intended. (2) Two genuinely distinct Claude turns that are byte-identical
+// on (source,sessionId,timestamp-to-the-ms,model,all token fields) would still
+// collapse here; this does not occur in practice and a true cryptographic
+// guarantee would need a store-hash migration, deliberately out of scope.
 export function hashEvent(e: UnifiedTokenEvent): string {
   const payload = [
     e.source,
@@ -133,15 +148,23 @@ function sameFileSet(a: StoreFileMeta[], b: StoreFileMeta[]): boolean {
   return true;
 }
 
+function isFiniteNumber(x: unknown): x is number {
+  return typeof x === 'number' && Number.isFinite(x);
+}
+
 function isTokenCounts(v: unknown): v is UnifiedTokenEvent['tokens'] {
   if (!v || typeof v !== 'object') return false;
   const t = v as Record<string, unknown>;
+  // Require *finite* numbers, not just `typeof number`: NaN/Infinity are
+  // typeof 'number' and would poison every aggregate that sums tokens. JSON
+  // can't carry NaN (a poisoned value serializes to null), so this also
+  // rejects historical lines written before the loader-side finite guard.
   return (
-    typeof t.input === 'number' &&
-    typeof t.output === 'number' &&
-    typeof t.cacheCreation === 'number' &&
-    typeof t.cacheRead === 'number' &&
-    typeof t.reasoning === 'number'
+    isFiniteNumber(t.input) &&
+    isFiniteNumber(t.output) &&
+    isFiniteNumber(t.cacheCreation) &&
+    isFiniteNumber(t.cacheRead) &&
+    isFiniteNumber(t.reasoning)
   );
 }
 
@@ -236,7 +259,7 @@ function loadFile(file: string, into: LoadOutcome): void {
       typeof parsed.timestamp !== 'string' ||
       typeof parsed.sessionId !== 'string' ||
       typeof parsed.model !== 'string' ||
-      !parsed.tokens || typeof parsed.tokens !== 'object'
+      !isTokenCounts(parsed.tokens)
     ) {
       into.badSeen++;
       continue;

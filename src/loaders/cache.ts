@@ -3,7 +3,11 @@ import path from 'node:path';
 import { getStoreDir } from '../store.js';
 import type { Source, UnifiedTokenEvent } from '../types.js';
 
-const CACHE_VERSION = 1;
+// v2: the Claude loader's dedupeKey is now `string | null` (null for entries
+// missing messageId/requestId, never deduped — ccusage parity). v1 records
+// carry the old synthetic `ts:model:in:out` fallback string; bumping forces a
+// one-time reparse so stale synthetic keys can't suppress ID-less events.
+const CACHE_VERSION = 2;
 
 interface FileCacheEntry<T> {
 	mtimeMs: number;
