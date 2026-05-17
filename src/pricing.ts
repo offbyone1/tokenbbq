@@ -8,6 +8,16 @@ type ModelPricing = {
 	output_cost_per_token?: number;
 	cache_creation_input_token_cost?: number;
 	cache_read_input_token_cost?: number;
+	// Long-context tiered rates: tokens of a given type ABOVE 200k (per event)
+	// are priced at these higher rates. LiteLLM publishes them for Claude/
+	// Anthropic models; ccusage applies exactly the 200k threshold per token
+	// type per entry (packages/internal/src/pricing.ts calculateTieredCost).
+	// Models without these fields fall back to flat pricing — identical to
+	// ccusage, which does the same (it does NOT implement Gemini's 128k tier).
+	input_cost_per_token_above_200k_tokens?: number;
+	output_cost_per_token_above_200k_tokens?: number;
+	cache_creation_input_token_cost_above_200k_tokens?: number;
+	cache_read_input_token_cost_above_200k_tokens?: number;
 };
 
 const FALLBACK_PRICES: Record<string, ModelPricing> = {
@@ -16,6 +26,12 @@ const FALLBACK_PRICES: Record<string, ModelPricing> = {
 		output_cost_per_token: 15e-6,
 		cache_read_input_token_cost: 0.3e-6,
 		cache_creation_input_token_cost: 3.75e-6,
+		// Anthropic >200k long-context rates (offline fallback only; live
+		// LiteLLM carries these verbatim and they're used the same way).
+		input_cost_per_token_above_200k_tokens: 6e-6,
+		output_cost_per_token_above_200k_tokens: 22.5e-6,
+		cache_read_input_token_cost_above_200k_tokens: 0.6e-6,
+		cache_creation_input_token_cost_above_200k_tokens: 7.5e-6,
 	},
 	'claude-opus-4-20250514': {
 		input_cost_per_token: 15e-6,
@@ -106,22 +122,64 @@ function findModelPricing(
 	return null;
 }
 
+// Faithful port of ccusage's tiered-cost helper
+// (packages/internal/src/pricing.ts:284). Tokens of a single token type, for a
+// single event, above `threshold` are billed at `tieredPrice`; the rest at
+// `basePrice`. When `tieredPrice` is absent the model is flat-priced — exactly
+// ccusage's behaviour, so non-Claude models (and Claude pre-tier) match.
+// The threshold is applied PER EVENT, before any daily/monthly aggregation,
+// because enrichCosts calls this once per UnifiedTokenEvent.
+function calculateTieredCost(
+	totalTokens: number | undefined,
+	basePrice: number | undefined,
+	tieredPrice: number | undefined,
+	threshold = 200_000,
+): number {
+	if (totalTokens == null || totalTokens <= 0) return 0;
+
+	if (totalTokens > threshold && tieredPrice != null) {
+		const tokensBelowThreshold = Math.min(totalTokens, threshold);
+		const tokensAboveThreshold = Math.max(0, totalTokens - threshold);
+
+		let tieredCost = tokensAboveThreshold * tieredPrice;
+		if (basePrice != null) tieredCost += tokensBelowThreshold * basePrice;
+		return tieredCost;
+	}
+
+	if (basePrice != null) return totalTokens * basePrice;
+	return 0;
+}
+
 export async function calculateCost(model: string, tokens: TokenCounts): Promise<number> {
 	const prices = await fetchPricing();
 	const pricing = findModelPricing(prices, model);
 	if (!pricing) return 0;
 
-	const inputCost = tokens.input * (pricing.input_cost_per_token ?? 0);
-	const outputCost = tokens.output * (pricing.output_cost_per_token ?? 0);
+	const inputCost = calculateTieredCost(
+		tokens.input,
+		pricing.input_cost_per_token,
+		pricing.input_cost_per_token_above_200k_tokens,
+	);
+	const outputCost = calculateTieredCost(
+		tokens.output,
+		pricing.output_cost_per_token,
+		pricing.output_cost_per_token_above_200k_tokens,
+	);
 	// Cache pricing is provider-specific (Anthropic charges 1.25× input for
 	// writes / 0.1× for reads; OpenAI ~0.5× for reads). When LiteLLM doesn't
-	// publish explicit cache rates for a model, fall back to 0 — falling back
-	// to the input rate would inflate cache-read cost up to 10× (Anthropic)
-	// and silently misprice every Claude Code session.
-	const cacheCreateCost =
-		tokens.cacheCreation * (pricing.cache_creation_input_token_cost ?? 0);
-	const cacheReadCost =
-		tokens.cacheRead * (pricing.cache_read_input_token_cost ?? 0);
+	// publish explicit cache rates for a model, calculateTieredCost returns 0 —
+	// falling back to the input rate would inflate cache-read cost up to 10×
+	// (Anthropic) and silently misprice every Claude Code session.
+	const cacheCreateCost = calculateTieredCost(
+		tokens.cacheCreation,
+		pricing.cache_creation_input_token_cost,
+		pricing.cache_creation_input_token_cost_above_200k_tokens,
+	);
+	const cacheReadCost = calculateTieredCost(
+		tokens.cacheRead,
+		pricing.cache_read_input_token_cost,
+		pricing.cache_read_input_token_cost_above_200k_tokens,
+	);
 
 	return inputCost + outputCost + cacheCreateCost + cacheReadCost;
 }
