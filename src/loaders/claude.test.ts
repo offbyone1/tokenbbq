@@ -146,4 +146,33 @@ describe('loadClaudeEvents — ccusage usageDataSchema parity', () => {
     })]);
     assert.equal((await loadClaudeEvents()).length, 1);
   });
+
+  test('dedupes entries that share messageId:requestId (== ccusage)', async () => {
+    const dup = {
+      timestamp: '2026-05-01T10:00:00.000Z', sessionId: 's1', requestId: 'same-req',
+      message: { id: 'same-msg', model: 'claude-sonnet-4-20250514', usage: { input_tokens: 100, output_tokens: 50 } },
+    };
+    writeSession('h.jsonl', [dup, { ...dup }]);
+    assert.equal((await loadClaudeEvents()).length, 1);
+  });
+
+  test('NEVER dedupes ID-less entries — even byte-identical ones (ccusage isDuplicateEntry(null)=false)', async () => {
+    // Same timestamp/model/input/output and NO requestId: the old synthetic
+    // fallback key collapsed these into 1, undercounting vs ccusage.
+    const idless = {
+      timestamp: '2026-05-01T10:00:00.000Z', sessionId: 's1',
+      message: { model: 'claude-sonnet-4-20250514', usage: { input_tokens: 100, output_tokens: 50 } },
+    };
+    writeSession('i.jsonl', [idless, { ...idless }, { ...idless }]);
+    assert.equal((await loadClaudeEvents()).length, 3);
+  });
+
+  test('missing only requestId → not deduped (either id absent ⇒ null key)', async () => {
+    const noReq = {
+      timestamp: '2026-05-01T10:00:00.000Z', sessionId: 's1',
+      message: { id: 'msg-x', model: 'claude-sonnet-4-20250514', usage: { input_tokens: 100, output_tokens: 50 } },
+    };
+    writeSession('j.jsonl', [noReq, { ...noReq }]);
+    assert.equal((await loadClaudeEvents()).length, 2);
+  });
 });

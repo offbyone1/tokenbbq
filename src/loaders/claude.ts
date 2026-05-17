@@ -93,8 +93,11 @@ function parseLine(raw: Record<string, unknown>): UnifiedTokenEvent | null {
 	};
 }
 
+// dedupeKey is null when the upstream entry lacks a messageId or requestId.
+// ccusage's createUniqueHash returns null in that case and isDuplicateEntry
+// (null) === false — i.e. ID-less entries are NEVER treated as duplicates.
 type CachedClaudeEvent = {
-	dedupeKey: string;
+	dedupeKey: string | null;
 	event: UnifiedTokenEvent;
 };
 
@@ -103,7 +106,7 @@ function isCachedClaudeEvent(value: unknown): value is CachedClaudeEvent {
 	const record = value as Record<string, unknown>;
 	const event = record.event as Record<string, unknown> | undefined;
 	return (
-		typeof record.dedupeKey === 'string' &&
+		(typeof record.dedupeKey === 'string' || record.dedupeKey === null) &&
 		!!event &&
 		typeof event.source === 'string' &&
 		typeof event.timestamp === 'string' &&
@@ -166,9 +169,14 @@ export async function loadClaudeEvents(): Promise<UnifiedTokenEvent[]> {
 
 			const requestId = String(parsed.requestId ?? '');
 			const messageId = String((parsed.message as Record<string, unknown>)?.id ?? '');
+			// Match ccusage exactly: a stable key ONLY when both ids exist;
+			// otherwise null → never deduplicated. The previous synthetic
+			// `timestamp:model:input:output` fallback could collapse genuinely
+			// distinct ID-less events (it also ignored cache tokens), making
+			// totals lower than ccusage.
 			const dedupeKey = requestId && messageId
 				? `${messageId}:${requestId}`
-				: `${event.timestamp}:${event.model}:${event.tokens.input}:${event.tokens.output}`;
+				: null;
 
 			fileEvents.push({ dedupeKey, event });
 		}
@@ -177,6 +185,10 @@ export async function loadClaudeEvents(): Promise<UnifiedTokenEvent[]> {
 
 	const seen = new Set<string>();
 	const events = records.flatMap((record) => {
+		// null key (missing messageId/requestId) is never a duplicate and is
+		// never recorded — mirrors ccusage isDuplicateEntry(null)===false +
+		// markAsProcessed(null)=noop. Only id-bearing entries are deduped.
+		if (record.dedupeKey === null) return [record.event];
 		if (seen.has(record.dedupeKey)) return [];
 		seen.add(record.dedupeKey);
 		return [record.event];
