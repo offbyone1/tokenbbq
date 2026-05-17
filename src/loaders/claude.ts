@@ -72,7 +72,10 @@ function parseLine(raw: Record<string, unknown>): UnifiedTokenEvent | null {
 	const cacheRead = optionalTokenNumber(usage.cache_read_input_tokens);
 	if (cacheRead === null) return null;
 
-	if (input === 0 && output === 0) return null;
+	// No zero-token drop: ccusage's schema accepts input_tokens/output_tokens
+	// of 0 and still sums cache_creation/cache_read (calculateTotals). A cache-
+	// only turn (input=0, output=0, cache_read>0) is real usage; dropping it
+	// here undercounted tokens and cost versus ccusage.
 
 	return {
 		source: 'claude-code',

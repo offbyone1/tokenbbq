@@ -123,4 +123,27 @@ describe('loadClaudeEvents — ccusage usageDataSchema parity', () => {
     })]);
     assert.equal((await loadClaudeEvents()).length, 0);
   });
+
+  test('keeps a cache-only entry (input=0, output=0, cache_read>0) — ccusage parity', async () => {
+    writeSession('f.jsonl', [line({
+      message: {
+        id: 'm6', model: 'claude-sonnet-4-20250514',
+        usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 1500 },
+      },
+      requestId: 'r6',
+    })]);
+    const events = await loadClaudeEvents();
+    assert.equal(events.length, 1);
+    assert.deepEqual(events[0].tokens, {
+      input: 0, output: 0, cacheCreation: 0, cacheRead: 1500, reasoning: 0,
+    });
+  });
+
+  test('keeps a pure zero-token entry (ccusage schema accepts 0/0)', async () => {
+    writeSession('g.jsonl', [line({
+      message: { id: 'm7', model: 'x', usage: { input_tokens: 0, output_tokens: 0 } },
+      requestId: 'r7',
+    })]);
+    assert.equal((await loadClaudeEvents()).length, 1);
+  });
 });
