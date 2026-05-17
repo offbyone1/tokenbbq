@@ -133,15 +133,23 @@ function sameFileSet(a: StoreFileMeta[], b: StoreFileMeta[]): boolean {
   return true;
 }
 
+function isFiniteNumber(x: unknown): x is number {
+  return typeof x === 'number' && Number.isFinite(x);
+}
+
 function isTokenCounts(v: unknown): v is UnifiedTokenEvent['tokens'] {
   if (!v || typeof v !== 'object') return false;
   const t = v as Record<string, unknown>;
+  // Require *finite* numbers, not just `typeof number`: NaN/Infinity are
+  // typeof 'number' and would poison every aggregate that sums tokens. JSON
+  // can't carry NaN (a poisoned value serializes to null), so this also
+  // rejects historical lines written before the loader-side finite guard.
   return (
-    typeof t.input === 'number' &&
-    typeof t.output === 'number' &&
-    typeof t.cacheCreation === 'number' &&
-    typeof t.cacheRead === 'number' &&
-    typeof t.reasoning === 'number'
+    isFiniteNumber(t.input) &&
+    isFiniteNumber(t.output) &&
+    isFiniteNumber(t.cacheCreation) &&
+    isFiniteNumber(t.cacheRead) &&
+    isFiniteNumber(t.reasoning)
   );
 }
 
@@ -236,7 +244,7 @@ function loadFile(file: string, into: LoadOutcome): void {
       typeof parsed.timestamp !== 'string' ||
       typeof parsed.sessionId !== 'string' ||
       typeof parsed.model !== 'string' ||
-      !parsed.tokens || typeof parsed.tokens !== 'object'
+      !isTokenCounts(parsed.tokens)
     ) {
       into.badSeen++;
       continue;

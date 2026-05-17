@@ -101,6 +101,25 @@ describe('loadStore', () => {
     assert.equal(state.events.length, 1);
   });
 
+  test('rejects a NaN-poisoned token line (serializes to null on disk)', () => {
+    const good = ev({ sessionId: 'ok' });
+    const goodLine = JSON.stringify({ v: 1, ...good, eventHash: hashEvent(good) }) + '\n';
+    // A pre-fix loader could let NaN into tokens.input; JSON.stringify turns
+    // NaN into null, so the persisted line carries `"input": null`. loadStore
+    // must drop it instead of summing null/NaN into every aggregate.
+    const poisoned = ev({ sessionId: 'bad' });
+    const poisonedLine = JSON.stringify({
+      v: 1, ...poisoned,
+      tokens: { ...poisoned.tokens, input: null },
+      eventHash: 'x',
+    }) + '\n';
+    appendFileSync(legacyPath(), goodLine + poisonedLine);
+
+    const state = loadStore();
+    assert.equal(state.events.length, 1);
+    assert.equal(state.events[0].sessionId, 'ok');
+  });
+
   test('ignores a poisoned cache written by the pre-fix version', () => {
     const eventsDir = path.join(tmp, 'events');
     mkdirSync(eventsDir, { recursive: true });
