@@ -1,7 +1,7 @@
 {
 	"name": "tokenbbq",
 	"type": "module",
-	"version": "0.6.0",
+	"version": "0.7.0",
 	"description": "See absolute token usage, estimated costs, project/model breakdowns, and Claude/Codex rate-limit windows for AI coding CLIs",
 	"author": "offbyone1",
 	"license": "MIT",
