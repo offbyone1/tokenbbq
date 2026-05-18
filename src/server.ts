@@ -15,6 +15,14 @@ const BRAND_LOGO_CONTENT_TYPES: Record<string, string> = {
 	'.webp': 'image/webp',
 };
 
+// Single source of truth for the loopback address. We bind here AND open the
+// browser here. They must never diverge: binding 127.0.0.1 (IPv4 loopback
+// only — see the security note at the serve() call) while opening
+// `http://localhost` is the "dashboard almost never opens on Windows" bug —
+// Windows resolves `localhost` to ::1 (IPv6) first, where nothing listens, so
+// the browser hangs in SYN_SENT.
+const DASHBOARD_HOST = '127.0.0.1';
+
 function isPortFree(port: number): Promise<boolean> {
 	return new Promise((resolve) => {
 		const srv = createServer();
@@ -34,6 +42,13 @@ async function findFreePort(preferred: number): Promise<number> {
 }
 
 export interface ServerHandle {
+	/**
+	 * The loopback URL the server is actually bound to (with the resolved
+	 * port, which may differ from the requested one). Callers that open or
+	 * link to the dashboard MUST use this rather than reconstructing it from
+	 * a host string — that drift is exactly the Windows IPv6 bug.
+	 */
+	url: string;
 	/**
 	 * Force a fresh data reload and broadcast an SSE update to all
 	 * subscribed clients. Safe to call repeatedly; the underlying readData
@@ -171,8 +186,8 @@ export async function startServer(
 	// Bind to loopback only. The dashboard exposes /api/data unauthenticated
 	// — project names, model IDs, session IDs — which has no business being
 	// reachable from anything other than this machine.
-	const server = serve({ fetch: app.fetch, port, hostname: '127.0.0.1' }, (info) => {
-		const url = `http://localhost:${info.port}`;
+	const url = `http://${DASHBOARD_HOST}:${port}`;
+	const server = serve({ fetch: app.fetch, port, hostname: DASHBOARD_HOST }, () => {
 		console.log(`\n  Dashboard running at ${url}\n`);
 		if (port !== options.port) {
 			console.log(`  (Port ${options.port} was in use, using ${port} instead)\n`);
@@ -185,6 +200,7 @@ export async function startServer(
 	});
 
 	return {
+		url,
 		notifyDataChanged: async () => {
 			await readData(true);
 			broadcast();
