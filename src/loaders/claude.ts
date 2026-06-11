@@ -29,6 +29,21 @@ function getClaudePaths(): string[] {
 	return candidates.filter((p) => existsSync(path.join(p, 'projects')));
 }
 
+// valibot `v.number()` (required): present and a real number, else the entry
+// is rejected. Returns null to signal "reject the whole event".
+function requiredTokenNumber(x: unknown): number | null {
+	return typeof x === 'number' && Number.isFinite(x) ? x : null;
+}
+
+// valibot `v.optional(v.number())`: only an ABSENT key (JS `undefined`) is
+// allowed to be missing → default 0. A PRESENT value must be a real number;
+// `null` (JSON null), strings, etc. are not numbers, so valibot fails the
+// parse and ccusage drops the whole entry. Returning null signals "reject".
+function optionalTokenNumber(x: unknown): number | null {
+	if (x === undefined) return 0;
+	return typeof x === 'number' && Number.isFinite(x) ? x : null;
+}
+
 function parseLine(raw: Record<string, unknown>): UnifiedTokenEvent | null {
 	if (!isValidTimestamp(raw.timestamp)) return null;
 
@@ -39,9 +54,28 @@ function parseLine(raw: Record<string, unknown>): UnifiedTokenEvent | null {
 	if (!usage) return null;
 
 	const model = String(message.model ?? 'unknown');
-	const input = Number(usage.input_tokens ?? 0);
-	const output = Number(usage.output_tokens ?? 0);
-	if (input === 0 && output === 0) return null;
+
+	// Mirror ccusage's usageDataSchema (apps/ccusage/src/data-loader.ts:167):
+	// message.usage.input_tokens / output_tokens are required `v.number()`,
+	// the two cache fields are `v.optional(v.number())`. A required field that
+	// is absent or not a number makes ccusage drop the whole entry; an optional
+	// field absent defaults to 0 but, if present, must be a number. We coerce
+	// nothing (string "100" is rejected, just like valibot) and additionally
+	// reject non-finite numbers (Infinity from `1e999`) — intentional hardening
+	// over bare v.number(); such values can't occur in well-formed JSONL.
+	const input = requiredTokenNumber(usage.input_tokens);
+	if (input === null) return null;
+	const output = requiredTokenNumber(usage.output_tokens);
+	if (output === null) return null;
+	const cacheCreation = optionalTokenNumber(usage.cache_creation_input_tokens);
+	if (cacheCreation === null) return null;
+	const cacheRead = optionalTokenNumber(usage.cache_read_input_tokens);
+	if (cacheRead === null) return null;
+
+	// No zero-token drop: ccusage's schema accepts input_tokens/output_tokens
+	// of 0 and still sums cache_creation/cache_read (calculateTotals). A cache-
+	// only turn (input=0, output=0, cache_read>0) is real usage; dropping it
+	// here undercounted tokens and cost versus ccusage.
 
 	return {
 		source: 'claude-code',
@@ -51,16 +85,19 @@ function parseLine(raw: Record<string, unknown>): UnifiedTokenEvent | null {
 		tokens: {
 			input,
 			output,
-			cacheCreation: Number(usage.cache_creation_input_tokens ?? 0),
-			cacheRead: Number(usage.cache_read_input_tokens ?? 0),
+			cacheCreation,
+			cacheRead,
 			reasoning: 0,
 		},
 		costUSD: typeof raw.costUSD === 'number' ? raw.costUSD : 0,
 	};
 }
 
+// dedupeKey is null when the upstream entry lacks a messageId or requestId.
+// ccusage's createUniqueHash returns null in that case and isDuplicateEntry
+// (null) === false — i.e. ID-less entries are NEVER treated as duplicates.
 type CachedClaudeEvent = {
-	dedupeKey: string;
+	dedupeKey: string | null;
 	event: UnifiedTokenEvent;
 };
 
@@ -69,7 +106,7 @@ function isCachedClaudeEvent(value: unknown): value is CachedClaudeEvent {
 	const record = value as Record<string, unknown>;
 	const event = record.event as Record<string, unknown> | undefined;
 	return (
-		typeof record.dedupeKey === 'string' &&
+		(typeof record.dedupeKey === 'string' || record.dedupeKey === null) &&
 		!!event &&
 		typeof event.source === 'string' &&
 		typeof event.timestamp === 'string' &&
@@ -132,9 +169,14 @@ export async function loadClaudeEvents(): Promise<UnifiedTokenEvent[]> {
 
 			const requestId = String(parsed.requestId ?? '');
 			const messageId = String((parsed.message as Record<string, unknown>)?.id ?? '');
+			// Match ccusage exactly: a stable key ONLY when both ids exist;
+			// otherwise null → never deduplicated. The previous synthetic
+			// `timestamp:model:input:output` fallback could collapse genuinely
+			// distinct ID-less events (it also ignored cache tokens), making
+			// totals lower than ccusage.
 			const dedupeKey = requestId && messageId
 				? `${messageId}:${requestId}`
-				: `${event.timestamp}:${event.model}:${event.tokens.input}:${event.tokens.output}`;
+				: null;
 
 			fileEvents.push({ dedupeKey, event });
 		}
@@ -143,6 +185,10 @@ export async function loadClaudeEvents(): Promise<UnifiedTokenEvent[]> {
 
 	const seen = new Set<string>();
 	const events = records.flatMap((record) => {
+		// null key (missing messageId/requestId) is never a duplicate and is
+		// never recorded — mirrors ccusage isDuplicateEntry(null)===false +
+		// markAsProcessed(null)=noop. Only id-bearing entries are deduped.
+		if (record.dedupeKey === null) return [record.event];
 		if (seen.has(record.dedupeKey)) return [];
 		seen.add(record.dedupeKey);
 		return [record.event];

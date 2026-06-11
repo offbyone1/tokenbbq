@@ -153,6 +153,17 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 			// reports cached > input (would otherwise produce negative freshInput).
 			const cachedInput = Math.min(raw.cached, raw.input);
 			const freshInput = Math.max(raw.input - cachedInput, 0);
+			// Same story for output: OpenAI's `output_tokens` already INCLUDES
+			// `reasoning_output_tokens` (an informative subset). TokenCounts
+			// treats `reasoning` as an additive bucket (Gemini/OpenCode report
+			// it separately from output), so carve it out of `output` here:
+			// output + reasoning re-adds to exactly the reported output_tokens,
+			// and totalTokenCount matches ccusage's Codex total (input + output)
+			// without double-counting. Math.min clamps malformed deltas where
+			// the independent per-field clamping in subtractUsage could yield
+			// reasoning > output after an upstream counter reset.
+			const reasoningOutput = Math.min(raw.reasoning, raw.output);
+			const nonReasoningOutput = raw.output - reasoningOutput;
 			events.push({
 				source: 'codex',
 				timestamp,
@@ -160,10 +171,10 @@ export async function loadCodexEvents(): Promise<UnifiedTokenEvent[]> {
 				model,
 				tokens: {
 					input: freshInput,
-					output: raw.output,
+					output: nonReasoningOutput,
 					cacheCreation: 0,
 					cacheRead: cachedInput,
-					reasoning: raw.reasoning,
+					reasoning: reasoningOutput,
 				},
 				costUSD: 0,
 				project: sessionProject,

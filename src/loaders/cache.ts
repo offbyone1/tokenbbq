@@ -3,7 +3,13 @@ import path from 'node:path';
 import { getStoreDir } from '../store.js';
 import type { Source, UnifiedTokenEvent } from '../types.js';
 
-const CACHE_VERSION = 1;
+// v2: (a) the Claude loader's dedupeKey is now `string | null` (null for
+// entries missing messageId/requestId, never deduped — ccusage parity); v1
+// records carry the old synthetic `ts:model:in:out` fallback string. (b) the
+// Codex loader now carves reasoning out of `output` (OpenAI reports it as a
+// subset); v1 records still hold reasoning-inclusive output. Bumping forces a
+// one-time reparse so neither stale shape can leak into fresh runs.
+const CACHE_VERSION = 2;
 
 interface FileCacheEntry<T> {
 	mtimeMs: number;

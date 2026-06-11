@@ -161,6 +161,12 @@ export function addTokens(a: TokenCounts, b: TokenCounts): TokenCounts {
 	};
 }
 
+// Contract: `reasoning` is an ADDITIVE bucket — it counts tokens that are not
+// already inside `output`. Loaders whose upstream format reports reasoning as
+// a subset of output (Codex/OpenAI) must carve it out of `output` at the
+// boundary (see loaders/codex.ts) so this sum never double-counts. Gemini
+// (`thoughts`) and OpenCode report reasoning separately from output, so for
+// them the field is naturally additive and must stay in the total.
 export function totalTokenCount(t: TokenCounts): number {
 	return t.input + t.output + t.cacheCreation + t.cacheRead + t.reasoning;
 }

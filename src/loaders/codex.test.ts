@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync, utimesSync } from 'node:
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { loadCodexEvents, loadCodexRateLimits, normalizeUsage, subtractUsage, type RawUsage } from './codex.js';
+import { totalTokenCount } from '../types.js';
 
 function makeSession(dir: string, name: string, lines: string[], mtimeSec?: number): string {
 	const file = path.join(dir, name);
@@ -304,22 +305,34 @@ describe('loadCodexEvents', () => {
 		const events = await loadCodexEvents();
 		assert.equal(events.length, 2);
 		// First turn: prev is null, so raw = lastUsage = (1000, cached 700, 100, 20).
-		// fresh = 1000 - 700 = 300, cacheRead = 700.
+		// fresh = 1000 - 700 = 300, cacheRead = 700. OpenAI's output_tokens
+		// INCLUDES reasoning, so the loader carves it out: output = 100 - 20.
 		assert.deepEqual(events[0].tokens, {
 			input: 300,
-			output: 100,
+			output: 80,
 			cacheCreation: 0,
 			cacheRead: 700,
 			reasoning: 20,
 		});
 		// Second turn: raw = total2 - total1 = (200, 100, 10, 5).
-		// fresh = 200 - 100 = 100, cacheRead = 100.
+		// fresh = 200 - 100 = 100, cacheRead = 100, output = 10 - 5.
 		assert.deepEqual(events[1].tokens, {
 			input: 100,
-			output: 10,
+			output: 5,
 			cacheCreation: 0,
 			cacheRead: 100,
 			reasoning: 5,
 		});
+
+		// ccusage parity invariant: ccusage's Codex total is the reported
+		// `total_tokens` (data-loader.ts:91, `total_tokens > 0 ? total_tokens
+		// : input + output`). We reconstruct it from the 5-field breakdown.
+		// Because OpenAI defines total_tokens === input_tokens + output_tokens,
+		// cached ⊆ input, and reasoning ⊆ output (carved out by the loader),
+		// totalTokenCount (input+output+cacheCreation+cacheRead+reasoning) must
+		// equal the reported total_tokens for well-formed logs.
+		// Turn 1 reported total = 1100; turn 2 reported delta total = 1310-1100.
+		assert.equal(totalTokenCount(events[0].tokens), 1100);
+		assert.equal(totalTokenCount(events[1].tokens), 1310 - 1100);
 	});
 });
