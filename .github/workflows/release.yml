@@ -8,110 +8,12 @@ on:
 permissions:
   contents: write
 
-# Opt all JS actions into Node.js 24 — Node 20 is deprecated as of GitHub's
-# 2025-09-19 changelog and will be forced on 2026-06-02. Setting this now
-# silences the runner warning and exercises the post-cutover behaviour
-# before it becomes mandatory.
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
-# Job order is build-everything → publish-everything. A failure in
-# `build-widget` used to leave npm published but no widget binaries on the
-# Release — unrecoverable since npm versions are immutable. Now the npm
-# publish + un-drafting of the GitHub Release happen only after every
-# artifact succeeds.
 jobs:
-  prepare-release:
-    name: Build CLI + create draft Release
-    runs-on: ubuntu-latest
-    outputs:
-      release_id: ${{ steps.create_release.outputs.id }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Use Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build CLI
-        run: npm run build
-
-      - name: Create draft Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          draft: true
-
-  build-widget:
-    name: Build widget installer + attach to draft Release
-    needs: prepare-release
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: windows-latest
-            rust_target: x86_64-pc-windows-msvc
-          - platform: macos-14
-            rust_target: aarch64-apple-darwin
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Use Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.rust_target }}
-
-      - name: Cache Cargo build
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: widget/src-tauri
-
-      - name: Install root deps
-        run: npm ci
-
-      - name: Build CLI dist
-        run: npm run build
-
-      - name: Compile sidecar binary (Bun)
-        run: npm run build:sidecar
-
-      - name: Install widget deps
-        run: npm ci
-        working-directory: widget
-
-      # tauri-action runs `tauri build` and uploads installers to the
-      # draft Release created by `prepare-release`:
-      #   Windows → NSIS .exe + MSI
-      #   macOS   → .dmg + .app (unsigned; first launch needs right-click → Open)
-      - name: Build & upload Tauri installer
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          projectPath: widget
-          tagName: ${{ github.ref_name }}
-          releaseId: ${{ needs.prepare-release.outputs.release_id }}
-          args: --target ${{ matrix.rust_target }}
-
   publish:
-    name: Publish CLI to npm + un-draft Release
-    needs: [prepare-release, build-widget]
+    name: Build dashboard package and publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -125,7 +27,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build CLI
+      - name: Type check
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
         run: npm run build
 
       - name: Publish to npm
@@ -133,8 +41,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Un-draft Release
-        run: gh release edit "$TAG" --draft=false
-        env:
-          TAG: ${{ github.ref_name }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

@@ -6,37 +6,35 @@ import { enrichCosts } from './pricing.js';
 import { buildDashboardData } from './aggregator.js';
 import { startServer } from './server.js';
 import { startToolWatcher } from './watcher.js';
-import { printDailyTable, printMonthlyTable, printSummary } from './cli-output.js';
 import { loadStore, appendEvents, type StoreState } from './store.js';
 import { mergeFreshSourceEvents } from './event-merge.js';
 
 function parseArgs(argv: string[]) {
 	const args = argv.slice(2);
-	const command = args.find((a) => !a.startsWith('-')) ?? 'dashboard';
-	const port = Number(args.find((a) => a.startsWith('--port='))?.split('=')[1] ?? 3000);
-	// `scan` is a headless one-shot: emit DashboardData JSON to stdout and exit.
-	// It implies --json so embedders (e.g. the desktop widget sidecar) only need the verb.
-	const json = args.includes('--json') || command === 'scan';
+	const command = args.find((a) => !a.startsWith('-')) ?? null;
+	const portArg = args.find((a) => a.startsWith('--port='))?.split('=')[1];
+	const port = Number(portArg ?? 3000);
 	const noOpen = args.includes('--no-open');
 	const help = args.includes('--help') || args.includes('-h');
-	return { command, port, json, noOpen, help };
+	const unknownOptions = args.filter((a) => (
+		a.startsWith('-') &&
+		!a.startsWith('--port=') &&
+		a !== '--no-open' &&
+		a !== '--help' &&
+		a !== '-h'
+	));
+	return { command, port, noOpen, help, unknownOptions };
 }
 
 function printHelp(): void {
 	console.log(`
-${pc.bold('TokenBBQ')} — AI Coding Tool Usage Dashboard
+${pc.bold('TokenBBQ')} - AI coding tool usage dashboard
 
 ${pc.cyan('Usage:')}
-  npx tokenbbq                Open dashboard in browser (default)
-  npx tokenbbq daily          Show daily usage table in terminal
-  npx tokenbbq monthly        Show monthly usage table in terminal
-  npx tokenbbq summary        Show compact summary
-  npx tokenbbq scan           Print DashboardData JSON to stdout and exit
-                              (headless one-shot; for embedding in other tools)
+  npx tokenbbq                Open the local dashboard in your browser
 
 ${pc.cyan('Options:')}
   --port=<n>     Server port (default: 3000)
-  --json         Output raw JSON data
   --no-open      Don't auto-open browser
   -h, --help     Show this help
 
@@ -52,32 +50,8 @@ ${pc.cyan('Supported Tools:')}
 `);
 }
 
-// Bun-compiled binaries on Windows don't reliably flush stdout when the
-// process exits naturally — when spawned as a child of the Tauri widget (a
-// GUI process with no TTY), the JSON payload can be left in the runtime
-// buffer and never reach the parent's `output()`. Explicitly drain the
-// stdout buffer via the write callback, then exit, so the bytes actually
-// land in the parent's pipe.
-function writeJsonAndExit(data: unknown): Promise<void> {
-	return new Promise((resolve) => {
-		const payload = JSON.stringify(data, null, 2);
-		const flushed = process.stdout.write(payload, () => {
-			resolve();
-			process.exit(0);
-		});
-		if (!flushed) {
-			// Stdout buffer is full; resolve once it drains. Belt + braces.
-			process.stdout.once('drain', () => {
-				resolve();
-				process.exit(0);
-			});
-		}
-	});
-}
-
 // Only honour an explicit TOKENBBQ_LOGO_PATH. Without it, the dashboard
-// falls back to its inline SVG flame/coin mark — no need to hunt for a
-// PNG in the user's Downloads folder.
+// falls back to its inline SVG flame/coin mark.
 function getDashboardBrandLogoPath(): string | null {
 	const envPath = (process.env.TOKENBBQ_LOGO_PATH ?? '').trim();
 	if (envPath === '') return null;
@@ -86,28 +60,36 @@ function getDashboardBrandLogoPath(): string | null {
 }
 
 async function main(): Promise<void> {
-	const { command, port, json, noOpen, help } = parseArgs(process.argv);
-
-	// Don't crash if a downstream consumer (e.g. `tokenbbq scan | head`) closes
-	// the pipe before we finish writing — relevant for the headless scan path
-	// where the JSON payload can be large.
-	process.stdout.on('error', (err) => {
-		if ((err as NodeJS.ErrnoException).code === 'EPIPE') process.exit(0);
-	});
+	const { command, port, noOpen, help, unknownOptions } = parseArgs(process.argv);
 
 	if (help) {
 		printHelp();
 		return;
 	}
 
-	const log = json ? () => {} : console.error.bind(console);
+	if (unknownOptions.length > 0) {
+		console.error(pc.red('Error:'), `unknown option '${unknownOptions[0]}'. TokenBBQ now starts the dashboard only.`);
+		console.error(pc.dim('Run `npx tokenbbq --help` for supported options.'));
+		process.exit(1);
+	}
 
-	log('');
-	log(pc.bold('  🔥 TokenBBQ'));
-	log(pc.dim('  Scanning for AI tool usage data...\n'));
+	if (command) {
+		console.error(pc.red('Error:'), `unknown argument '${command}'. TokenBBQ now starts the dashboard only.`);
+		console.error(pc.dim('Run `npx tokenbbq --help` for supported options.'));
+		process.exit(1);
+	}
+
+	if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+		console.error(pc.red('Error:'), '--port must be a number between 1 and 65535.');
+		process.exit(1);
+	}
+
+	console.error('');
+	console.error(pc.bold('  TokenBBQ'));
+	console.error(pc.dim('  Scanning for AI tool usage data...\n'));
 
 	const store: StoreState = loadStore();
-	const { events: scanned, detected, errors, codexRateLimits } = await loadAll(json);
+	const { events: scanned, detected, errors, codexRateLimits } = await loadAll(false);
 	// Codex emits cumulative-total events that we re-derive deltas from on
 	// every scan; persisting them double-counts on the next run. Persist
 	// every other source as before, and merge fresh codex events on top
@@ -116,36 +98,20 @@ async function main(): Promise<void> {
 	const added = appendEvents(store, persistable);
 	let workingEvents = mergeFreshSourceEvents(store.events, scanned, ['codex']);
 
-	// Surface loader failures rather than silently dropping them. In JSON
-	// mode (incl. `scan`) we route to stderr so structured stdout stays
-	// machine-parseable.
 	for (const e of errors) {
 		console.error(pc.yellow(`  warn: loader '${e.source}' failed: ${e.error}`));
 	}
 
 	if (workingEvents.length === 0) {
-		// In JSON mode (incl. `scan`) emit a valid empty DashboardData rather than
-		// returning silently — embedders can then unconditionally JSON.parse stdout.
-		if (json) {
-			await writeJsonAndExit(buildDashboardData([], codexRateLimits));
-			return;
-		}
-		console.error(pc.yellow('\n  No usage data found.'));
-		console.error(pc.dim('  Make sure you have used at least one supported AI coding tool.'));
-		console.error(pc.dim('  Run `npx tokenbbq --help` for supported tool paths.\n'));
-		return;
+		console.error(pc.yellow('\n  No usage data found yet.'));
+		console.error(pc.dim('  Opening the dashboard anyway; it will refresh when supported tool data appears.\n'));
+	} else {
+		console.error(pc.dim(`\n  Total: ${workingEvents.length.toLocaleString()} events (+ ${added.length} new persisted from ${detected.length} source(s))\n`));
+		console.error(pc.dim('  Calculating costs...'));
+		await enrichCosts(workingEvents);
 	}
-
-	log(pc.dim(`\n  Total: ${workingEvents.length.toLocaleString()} events (+ ${added.length} new persisted from ${detected.length} source(s))\n`));
-	log(pc.dim('  Calculating costs...'));
-	await enrichCosts(workingEvents);
 
 	const data = buildDashboardData(workingEvents, codexRateLimits);
-
-	if (json) {
-		await writeJsonAndExit(data);
-		return;
-	}
 
 	const reloadDashboardData = async () => {
 		const { events: fresh, codexRateLimits: freshLimits } = await loadAll(true);
@@ -156,46 +122,27 @@ async function main(): Promise<void> {
 		return buildDashboardData(workingEvents, freshLimits);
 	};
 
-	switch (command) {
-		case 'daily':
-			printSummary(data);
-			printDailyTable(data);
-			break;
-		case 'monthly':
-			printSummary(data);
-			printMonthlyTable(data);
-			break;
-		case 'summary':
-			printSummary(data);
-			break;
-		case 'dashboard':
-		default:
-			printSummary(data);
-			const handle = await startServer(data, {
-				port,
-				open: !noOpen,
-				getData: reloadDashboardData,
-				brandLogoPath: getDashboardBrandLogoPath(),
-			});
+	const handle = await startServer(data, {
+		port,
+		open: !noOpen,
+		getData: reloadDashboardData,
+		brandLogoPath: getDashboardBrandLogoPath(),
+	});
 
-			const watcher = startToolWatcher(getAllWatchPaths(), () => {
-				handle.notifyDataChanged().catch(() => {});
-			});
-			if (watcher.watching > 0) {
-				log(pc.dim(`  Live-watching ${watcher.watching} tool director${watcher.watching === 1 ? 'y' : 'ies'} for changes.\n`));
-			}
-			// Single shutdown path so the watcher actually gets a chance to close.
-			// Previously startServer registered its own SIGINT handler that called
-			// process.exit(0) before the watcher.close() handler below could run.
-			const shutdown = () => {
-				watcher.close();
-				handle.stop();
-				process.exit(0);
-			};
-			process.on('SIGINT', shutdown);
-			process.on('SIGTERM', shutdown);
-			break;
+	const watcher = startToolWatcher(getAllWatchPaths(), () => {
+		handle.notifyDataChanged().catch(() => {});
+	});
+	if (watcher.watching > 0) {
+		console.error(pc.dim(`  Live-watching ${watcher.watching} tool director${watcher.watching === 1 ? 'y' : 'ies'} for changes.\n`));
 	}
+
+	const shutdown = () => {
+		watcher.close();
+		handle.stop();
+		process.exit(0);
+	};
+	process.on('SIGINT', shutdown);
+	process.on('SIGTERM', shutdown);
 }
 
 main().catch((err) => {
