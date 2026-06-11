@@ -17,8 +17,8 @@ import type {
 } from './types.js';
 import { emptyTokens, addTokens, totalTokenCount, isValidTimestamp } from './types.js';
 
-// Single source of truth for the order sources appear in across the CLI,
-// the dashboard charts, and any new consumer. Add new sources here, not in
+// Single source of truth for the order sources appear in across the
+// dashboard charts and any new consumer. Add new sources here, not in
 // per-component arrays — drift caused gemini to be ranked as "unknown" in
 // the dashboard before this was unified.
 export const SOURCE_ORDER: Source[] = [

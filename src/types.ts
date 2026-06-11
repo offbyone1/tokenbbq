@@ -220,9 +220,7 @@ export interface CodexRateLimits {
 	secondary: CodexWindowUsage | null;
 	/**
 	 * ISO timestamp of the source `token_count` event — i.e. the
-	 * moment of the user's last Codex API call. The widget renders
-	 * these numbers without an "as of" stamp by user request, but we
-	 * expose this for future use / debugging.
+	 * moment of the user's last Codex API call.
 	 */
 	snapshotAt: string;
 }

@@ -2,9 +2,9 @@
 // Reads node_modules/sql.js/dist/sql-wasm.wasm and writes a TS module that
 // exposes the bytes as base64. The OpenCode loader passes those bytes to
 // initSqlJs() as `wasmBinary`, so sql.js never tries to fopen() the
-// `dist/sql-wasm.wasm` path baked in by Emscripten — that path is the
-// build host's filesystem layout, which doesn't survive Bun --compile or
-// `npm publish` to anyone else's machine.
+// `dist/sql-wasm.wasm` path baked in by Emscripten. That path is the build
+// host's filesystem layout, which does not survive `npm publish` to anyone
+// else's machine.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';

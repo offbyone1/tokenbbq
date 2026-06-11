@@ -2,7 +2,7 @@
 	"name": "tokenbbq",
 	"type": "module",
 	"version": "0.7.0",
-	"description": "See absolute token usage, estimated costs, project/model breakdowns, and Claude/Codex rate-limit windows for AI coding CLIs",
+	"description": "Local dashboard for AI coding CLI token usage, estimated costs, and project/model breakdowns",
 	"author": "offbyone1",
 	"license": "MIT",
 	"homepage": "https://github.com/offbyone1/tokenbbq#readme",
@@ -48,16 +48,10 @@
 		"start": "node dist/index.js",
 		"lint": "node scripts/inline-wasm.mjs && node scripts/inline-dashboard-icon.mjs && tsc --noEmit",
 		"test": "node scripts/inline-dashboard-icon.mjs && node scripts/run-tests.mjs",
-		"prepublishOnly": "npm run build",
-		"build:sidecar": "node scripts/inline-wasm.mjs && node scripts/inline-dashboard-icon.mjs && node scripts/build-sidecar.mjs",
-		"widget:install": "npm install --prefix widget",
-		"widget:dev": "node scripts/build-sidecar.mjs --skip-if-no-bun && npm run --prefix widget tauri dev",
-		"widget:build": "npm run build && npm run build:sidecar && npm run --prefix widget tauri build -- --config src-tauri/tauri.dev.conf.json",
-		"widget:build:release": "npm run build && npm run build:sidecar && npm run --prefix widget tauri build"
+		"prepublishOnly": "npm run build"
 	},
 	"dependencies": {
 		"@hono/node-server": "^1.13.0",
-		"cli-table3": "^0.6.5",
 		"hono": "^4.6.0",
 		"open": "^10.1.0",
 		"picocolors": "^1.1.1",

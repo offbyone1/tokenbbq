@@ -9,8 +9,8 @@ import { SQL_WASM_BASE64 } from './sql-wasm-inline.js';
 import { loadCachedFileEvents } from './cache.js';
 
 // sql.js's default loader fopen()s `sql-wasm.wasm` from the path Emscripten
-// recorded at sql.js build time. After Bun --compile (or any other deploy
-// where node_modules isn't preserved) that path doesn't exist on the user's
+// recorded at sql.js build time. In the published package, that path does not
+// exist on the user's
 // machine and Emscripten aborts — taking the whole process down with exit
 // code 1 instead of letting our try/catch handle it. Embedding the wasm
 // bytes as base64 and passing them via `wasmBinary` sidesteps the filesystem
