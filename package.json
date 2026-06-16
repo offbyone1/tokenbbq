@@ -43,10 +43,10 @@
 		"node": ">=20"
 	},
 	"scripts": {
-		"build": "node scripts/inline-wasm.mjs && node scripts/inline-dashboard-icon.mjs && tsdown && node -e \"require('fs').renameSync('dist/index.mjs','dist/index.js')\"",
-		"dev": "node scripts/inline-wasm.mjs && node scripts/inline-dashboard-icon.mjs && node --import tsx src/index.ts",
+		"build": "node scripts/inline-wasm.mjs && node scripts/inline-dashboard-icon.mjs && node scripts/inline-vendor.mjs && tsdown && node -e \"require('fs').renameSync('dist/index.mjs','dist/index.js')\"",
+		"dev": "node scripts/inline-wasm.mjs && node scripts/inline-dashboard-icon.mjs && node scripts/inline-vendor.mjs && node --import tsx src/index.ts",
 		"start": "node dist/index.js",
-		"lint": "node scripts/inline-wasm.mjs && node scripts/inline-dashboard-icon.mjs && tsc --noEmit",
+		"lint": "node scripts/inline-wasm.mjs && node scripts/inline-dashboard-icon.mjs && node scripts/inline-vendor.mjs && tsc --noEmit",
 		"test": "node scripts/inline-dashboard-icon.mjs && node scripts/run-tests.mjs",
 		"prepublishOnly": "npm run build"
 	},

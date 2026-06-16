@@ -24,7 +24,7 @@ No install. No config. No API key. No TokenBBQ cloud.
 
 ## Dashboard
 
-TokenBBQ starts a local server and opens the dashboard in your browser. By default it uses `localhost:3000`; pass `--port=<n>` to choose another port.
+TokenBBQ starts a local server and opens the dashboard in your browser. By default it uses `localhost:3005`; pass `--port=<n>` to choose another port.
 
 ```bash
 npx tokenbbq@latest

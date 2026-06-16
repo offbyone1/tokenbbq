@@ -13,8 +13,8 @@ export function renderDashboard(data: DashboardData, options?: any): string {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TokenBBQ Dashboard</title>
 <link rel="icon" type="image/png" href="${DASHBOARD_BRAND_ICON_DATA_URL}">
-<script src="https://cdn.tailwindcss.com"><\/script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"><\/script>
+<script src="/vendor/tailwind.js"><\/script>
+<script src="/vendor/chart.js"><\/script>
 <script>
 tailwind.config = {
   darkMode: 'class',
