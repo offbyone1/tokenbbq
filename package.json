@@ -1,7 +1,7 @@
 {
 	"name": "tokenbbq",
 	"type": "module",
-	"version": "0.7.0",
+	"version": "0.7.1",
 	"description": "Local dashboard for AI coding CLI token usage, estimated costs, and project/model breakdowns",
 	"author": "offbyone1",
 	"license": "MIT",
