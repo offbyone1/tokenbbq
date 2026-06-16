@@ -6,6 +6,23 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { DashboardData } from './types.js';
 import { renderDashboard } from './dashboard.js';
+import { CHART_JS_BASE64, TAILWIND_JS_BASE64 } from './vendor-assets.js';
+
+// Chart.js and Tailwind are vendored and served locally instead of from a CDN.
+// The dashboard previously loaded chart.js@4 from jsdelivr, whose range URL
+// fell into an infinite redirect loop for every user — Chart.js never loaded,
+// the dashboard JS crashed on `Chart is not defined` before fetching
+// /api/data, and the page rendered blank. Decode the base64 payloads once at
+// module load; the bytes are immutable per build.
+const CHART_JS_BYTES = Buffer.from(CHART_JS_BASE64, 'base64');
+const TAILWIND_JS_BYTES = Buffer.from(TAILWIND_JS_BASE64, 'base64');
+const VENDOR_JS_HEADERS = {
+	'Content-Type': 'text/javascript; charset=utf-8',
+	// Immutable per build — the path has no hash, but the content only ever
+	// changes when a new TokenBBQ version ships, so a short cache is safe and
+	// avoids re-sending ~600 KB on every dashboard reload within a session.
+	'Cache-Control': 'public, max-age=3600',
+} as const;
 
 const BRAND_LOGO_MAX_BYTES = 10 * 1024 * 1024;
 const BRAND_LOGO_CONTENT_TYPES: Record<string, string> = {
@@ -153,6 +170,14 @@ export async function startServer(
 				}
 			}
 		});
+	});
+
+	app.get('/vendor/chart.js', (c) => {
+		return c.body(CHART_JS_BYTES, 200, VENDOR_JS_HEADERS);
+	});
+
+	app.get('/vendor/tailwind.js', (c) => {
+		return c.body(TAILWIND_JS_BYTES, 200, VENDOR_JS_HEADERS);
 	});
 
 	app.get('/brand-logo', async (c) => {
