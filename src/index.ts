@@ -13,7 +13,11 @@ function parseArgs(argv: string[]) {
 	const args = argv.slice(2);
 	const command = args.find((a) => !a.startsWith('-')) ?? null;
 	const portArg = args.find((a) => a.startsWith('--port='))?.split('=')[1];
-	const port = Number(portArg ?? 3000);
+	// Default 3005, not 3000: port 3000 is the de-facto default for countless
+	// local dev servers (Next, CRA, etc.) and is very often already taken, which
+	// would push the dashboard onto a fallback port an embedding widget can't
+	// predict. 3005 is far less contended.
+	const port = Number(portArg ?? 3005);
 	const noOpen = args.includes('--no-open');
 	const help = args.includes('--help') || args.includes('-h');
 	const unknownOptions = args.filter((a) => (
@@ -34,7 +38,7 @@ ${pc.cyan('Usage:')}
   npx tokenbbq                Open the local dashboard in your browser
 
 ${pc.cyan('Options:')}
-  --port=<n>     Server port (default: 3000)
+  --port=<n>     Server port (default: 3005)
   --no-open      Don't auto-open browser
   -h, --help     Show this help
 
