@@ -97,7 +97,7 @@ export async function loadCachedFileRecords<T>(
 ): Promise<T[]> {
 	if (!cacheEnabled()) {
 		const records: T[] = [];
-		for (const file of files) records.push(...await parseFile(file));
+		for (const file of files) for (const r of await parseFile(file)) records.push(r);
 		return records;
 	}
 
@@ -117,14 +117,14 @@ export async function loadCachedFileRecords<T>(
 		const hit = cache.files[file];
 		if (hit && hit.mtimeMs === info.mtimeMs && hit.size === info.size) {
 			nextFiles[file] = hit;
-			records.push(...hit.records);
+			for (const r of hit.records) records.push(r);
 			continue;
 		}
 
 		const parsed = await parseFile(file);
 		const entry = { ...info, records: parsed };
 		nextFiles[file] = entry;
-		records.push(...parsed);
+		for (const r of parsed) records.push(r);
 	}
 
 	await writeCache(source, { v: CACHE_VERSION, files: nextFiles });
