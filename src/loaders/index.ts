@@ -68,7 +68,7 @@ export async function loadAll(quiet = false): Promise<LoadAllResult> {
 			const { source, events: loaderEvents } = result.value;
 			if (loaderEvents.length > 0) {
 				detected.push(source);
-				events.push(...loaderEvents);
+				for (const e of loaderEvents) events.push(e);
 				log(
 					pc.green('  ✓'),
 					pc.bold(SOURCE_LABELS[source]),
